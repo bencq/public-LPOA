@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -135,6 +137,70 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, genesisErr
 	}
 	log.Info("Initialised chain configuration", "config", chainConfig)
+
+	//bencq+
+
+	if chainConfig.Clique != nil {
+		endptsOri := strings.Split(config.EndPointsFlag, ",")
+		etherbasesOri := strings.Split(config.EtherBasesFlag, ",")
+		if len(endptsOri) <= 0 {
+			return nil, errors.New("endpts length fewers than or equals to 0")
+		}
+		if config.EndPointIndex < 0 || config.EndPointIndex >= len(endptsOri) {
+			return nil, errors.New("EndPointIndex out of range")
+		}
+		if len(etherbasesOri) != len(endptsOri) {
+			return nil, errors.New("the length of etherbases is not equal to the length of endpoints")
+		}
+
+		if config.OvertimeFlag <= 0 {
+			return nil, errors.New("overtime must be bigger than 0")
+		}
+
+		etherbasesHex := make([]common.Address, len(etherbasesOri))
+
+		for ind := range etherbasesOri {
+
+			addrBytes, err := hexutil.Decode(etherbasesOri[ind])
+			//log.Error("bencq:", "etherbasesOri[ind]", etherbasesOri[ind])
+
+			if len(addrBytes) != common.AddressLength {
+				//log.Error("bencq:", "addrBytes", addrBytes)
+				return nil, errors.New("the length of one of etherbases is not " + strconv.Itoa(common.AddressLength))
+			}
+
+			if err != nil {
+				return nil, err
+			}
+			copy(etherbasesHex[ind][:], addrBytes)
+
+		}
+
+		//log.Error("bencq:", "config.EndPointsFlag", config.EndPointsFlag)
+		//log.Error("bencq:", "etherbasesOri", etherbasesOri)
+		//log.Error("bencq:", "etherbasesHex", etherbasesHex)
+
+		//TODO: remove these code
+		config.Miner.Endpts = make([]string, len(endptsOri))
+		copy(config.Miner.Endpts, endptsOri)
+
+		config.Miner.EndptsIndex = config.EndPointIndex
+
+		config.Miner.Etherbases = make([]common.Address, len(etherbasesHex))
+		copy(config.Miner.Etherbases, etherbasesHex)
+
+		config.Miner.Overtime = config.OvertimeFlag
+
+		//log.Error("bencq:", "config.Miner", config.Miner)
+
+		// chainConfig.Clique.Endpoint = endptsOri[config.EndPointIndex]
+
+		//whileList
+		// config.Whitelist =
+
+	}
+
+	//bencq-
 
 	if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb, stack.ResolvePath(config.TrieCleanCacheJournal)); err != nil {
 		log.Error("Failed to recover state", "error", err)
@@ -467,6 +533,9 @@ func (s *Ethereum) StartMining(threads int) error {
 				log.Error("Etherbase account unavailable locally", "err", err)
 				return fmt.Errorf("signer missing: %v", err)
 			}
+			//bencq+
+			//log.Error("bencq: StartMining Authorize", "eb", eb)
+			//bencq-
 			clique.Authorize(eb, wallet.SignData)
 		}
 		// If mining is started, we can disable the transaction rejection mechanism

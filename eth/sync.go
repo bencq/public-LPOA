@@ -32,8 +32,14 @@ import (
 )
 
 const (
-	forceSyncCycle      = 10 * time.Second // Time interval to force syncs, even if few peers are available
-	defaultMinSyncPeers = 5                // Amount of peers desired to start syncing
+	forceSyncCycle = 10 * time.Second // Time interval to force syncs, even if few peers are availabl
+	//bencq+
+	// forceSyncCycle = 3 * time.Second // Time interval to force syncs, even if few peers are available
+	//bencq-
+	// defaultMinSyncPeers = 5 // Amount of peers desired to start syncing
+	//bencq+
+	defaultMinSyncPeers = 1 // Amount of peers desired to start syncing
+	//bencq-
 
 	// This is the target size for the packs of transactions sent by txsyncLoop64.
 	// A pack can get larger than this if a single transactions exceeds this size.
@@ -184,6 +190,7 @@ func newChainSyncer(handler *handler) *chainSyncer {
 // chain head.
 func (cs *chainSyncer) handlePeerEvent(peer *eth.Peer) bool {
 	select {
+	//bencq: todo stuck here
 	case cs.peerEventCh <- struct{}{}:
 		return true
 	case <-cs.handler.quitSync:
@@ -207,13 +214,18 @@ func (cs *chainSyncer) loop() {
 	defer cs.force.Stop()
 
 	for {
+		//log.Error("bencq: loop: for")
 		if op := cs.nextSyncOp(); op != nil {
 			cs.startSync(op)
 		}
+		//log.Error("bencq: loop: for: bf select")
+		//bencq: toDO stuck here
 		select {
 		case <-cs.peerEventCh:
+			//log.Error("bencq: loop: case <-cs.peerEventCh:")
 			// Peer information changed, recheck.
 		case <-cs.doneCh:
+			//log.Error("bencq: loop: case <-cs.doneCh:")
 			cs.doneCh = nil
 			cs.force.Reset(forceSyncCycle)
 			cs.forced = false
@@ -231,12 +243,14 @@ func (cs *chainSyncer) loop() {
 			}
 			return
 		}
+		//log.Error("bencq: loop: for: af select")
 	}
 }
 
 // nextSyncOp determines whether sync is required at this time.
 func (cs *chainSyncer) nextSyncOp() *chainSyncOp {
 	if cs.doneCh != nil {
+		//log.Error("bencq: nextSyncOp: Sync already running.")
 		return nil // Sync already running.
 	}
 
@@ -247,12 +261,14 @@ func (cs *chainSyncer) nextSyncOp() *chainSyncOp {
 	} else if minPeers > cs.handler.maxPeers {
 		minPeers = cs.handler.maxPeers
 	}
+	//log.Error("bencq: nextSyncOp: ", "minPeers", minPeers, "cs.handler.peers.len()", cs.handler.peers.len())
 	if cs.handler.peers.len() < minPeers {
 		return nil
 	}
 	// We have enough peers, check TD
 	peer := cs.handler.peers.peerWithHighestTD()
 	if peer == nil {
+		//log.Error("bencq: nextSyncOp: peer == nil")
 		return nil
 	}
 	mode, ourTD := cs.modeAndLocalHead()
@@ -261,9 +277,12 @@ func (cs *chainSyncer) nextSyncOp() *chainSyncOp {
 		mode = downloader.SnapSync
 	}
 	op := peerToSyncOp(mode, peer)
+	//bencq+
 	if op.td.Cmp(ourTD) <= 0 {
+		//log.Error("bencq: nextSyncOp: op.td.Cmp(ourTD) <= 0")
 		return nil // We're in sync.
 	}
+	//bencq-
 	return op
 }
 
@@ -302,6 +321,10 @@ func (cs *chainSyncer) startSync(op *chainSyncOp) {
 
 // doSync synchronizes the local blockchain with a remote peer.
 func (h *handler) doSync(op *chainSyncOp) error {
+	//log.Error("bencq: bf doSync")
+	defer func() {
+		//log.Error("bencq: af doSync")
+	}()
 	if op.mode == downloader.FastSync || op.mode == downloader.SnapSync {
 		// Before launch the fast sync, we have to ensure user uses the same
 		// txlookup limit.

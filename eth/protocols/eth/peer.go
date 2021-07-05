@@ -320,11 +320,17 @@ func (p *Peer) AsyncSendNewBlockHash(block *types.Block) {
 
 // SendNewBlock propagates an entire block to a remote peer.
 func (p *Peer) SendNewBlock(block *types.Block, td *big.Int) error {
+	//bencq+
+	//log.Error("bencq: bf SendNewBlock", "block.NumberU64()", block.NumberU64())
+	defer func() {
+		//log.Error("bencq: af SendNewBlock", "block.NumberU64()", block.NumberU64())
+	}()
 	// Mark all the block hash as known, but ensure we don't overflow our limits
 	for p.knownBlocks.Cardinality() >= maxKnownBlocks {
 		p.knownBlocks.Pop()
 	}
 	p.knownBlocks.Add(block.Hash())
+	//bencq: todo to check
 	return p2p.Send(p.rw, NewBlockMsg, &NewBlockPacket{
 		Block: block,
 		TD:    td,

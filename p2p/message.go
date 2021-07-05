@@ -98,11 +98,54 @@ type MsgReadWriter interface {
 // Send writes an RLP-encoded message with the given code.
 // data should encode as an RLP list.
 func Send(w MsgWriter, msgcode uint64, data interface{}) error {
+
+	//bencq+
+	// msgCode2Msg := func(msgCode uint64) string {
+	// 	switch msgCode {
+	// 	case 0x00:
+	// 		return "StatusMsg"
+	// 	case 0x01:
+	// 		return "NewBlockHashesMsg"
+	// 	case 0x02:
+	// 		return "TransactionsMsg"
+	// 	case 0x03:
+	// 		return "GetBlockHeadersMsg"
+	// 	case 0x04:
+	// 		return "BlockHeadersMsg"
+	// 	case 0x05:
+	// 		return "GetBlockBodiesMsg"
+	// 	case 0x06:
+	// 		return "BlockBodiesMsg"
+	// 	case 0x07:
+	// 		return "NewBlockMsg"
+	// 	case 0x0d:
+	// 		return "GetNodeDataMsg"
+	// 	case 0x0e:
+	// 		return "NodeDataMsg"
+	// 	case 0x0f:
+	// 		return "GetReceiptsMsg"
+	// 	case 0x10:
+	// 		return "ReceiptsMsg"
+	// 	case 0x08:
+	// 		// Protocol messages overloaded in eth/65
+	// 		return "NewPooledTransactionHashesMsg"
+	// 	case 0x09:
+	// 		return "			GetPooledTransactionsMsg"
+	// 	case 0x0a:
+	// 		return "PooledTransactionsMsg"
+	// 	default:
+	// 		return "err"
+	// 	}
+	// }
+	//bencq-
 	size, r, err := rlp.EncodeToReader(data)
 	if err != nil {
 		return err
 	}
-	return w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})
+	// //log.Error("bencq: bf Send", "msgcode", msgCode2Msg(msgcode), "size", size)
+	ret := w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})
+	// //log.Error("bencq: af Send", "msgcode", msgCode2Msg(msgcode), "size", size)
+	return ret
 }
 
 // SendItems writes an RLP with the given code and data elements.

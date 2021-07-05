@@ -392,6 +392,7 @@ func (s *stateSync) loop() (err error) {
 
 					if master {
 						s.d.cancel()
+						//log.Error("bencq: loop: if: master errTimeout")
 						return errTimeout
 					}
 				}

@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -67,6 +68,14 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 	}
+
+	//bencq+
+	txCnt := len(block.Transactions())
+	log.Error("bencq: bf Process:", "block.NumberU64()", block.NumberU64(), "txCnt", txCnt)
+	defer func() {
+		//log.Error("bencq: af Process", "block.NumberU64()", block.NumberU64())
+	}()
+	//bencq-
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
 	// Iterate over and process the individual transactions
@@ -90,6 +99,13 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 }
 
 func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
+	//bencq+
+	// //log.Error("bencq: bf applyTransaction", "header.Number", header.Number, "tx.Nonce()", tx.Nonce())
+	// defer func() {
+	// 	//log.Error("bencq: af applyTransaction", "header.Number", header.Number, "tx.Nonce()", tx.Nonce())
+	// }()
+
+	//bencq-
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)

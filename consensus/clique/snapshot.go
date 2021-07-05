@@ -54,9 +54,10 @@ type Snapshot struct {
 	Number  uint64                      `json:"number"`  // Block number where the snapshot was created
 	Hash    common.Hash                 `json:"hash"`    // Block hash where the snapshot was created
 	Signers map[common.Address]struct{} `json:"signers"` // Set of authorized signers at this moment
-	Recents map[uint64]common.Address   `json:"recents"` // Set of recent signers for spam protections
-	Votes   []*Vote                     `json:"votes"`   // List of votes cast in chronological order
-	Tally   map[common.Address]Tally    `json:"tally"`   // Current vote tally to avoid recalculating
+
+	// Recents map[uint64]common.Address   `json:"recents"` // Set of recent signers for spam protections
+	Votes []*Vote                  `json:"votes"` // List of votes cast in chronological order
+	Tally map[common.Address]Tally `json:"tally"` // Current vote tally to avoid recalculating
 }
 
 // signersAscending implements the sort interface to allow sorting a list of addresses
@@ -76,8 +77,8 @@ func newSnapshot(config *params.CliqueConfig, sigcache *lru.ARCCache, number uin
 		Number:   number,
 		Hash:     hash,
 		Signers:  make(map[common.Address]struct{}),
-		Recents:  make(map[uint64]common.Address),
-		Tally:    make(map[common.Address]Tally),
+		// Recents:  make(map[uint64]common.Address),
+		Tally: make(map[common.Address]Tally),
 	}
 	for _, signer := range signers {
 		snap.Signers[signer] = struct{}{}
@@ -118,16 +119,16 @@ func (s *Snapshot) copy() *Snapshot {
 		Number:   s.Number,
 		Hash:     s.Hash,
 		Signers:  make(map[common.Address]struct{}),
-		Recents:  make(map[uint64]common.Address),
-		Votes:    make([]*Vote, len(s.Votes)),
-		Tally:    make(map[common.Address]Tally),
+		// Recents:  make(map[uint64]common.Address),
+		Votes: make([]*Vote, len(s.Votes)),
+		Tally: make(map[common.Address]Tally),
 	}
 	for signer := range s.Signers {
 		cpy.Signers[signer] = struct{}{}
 	}
-	for block, signer := range s.Recents {
-		cpy.Recents[block] = signer
-	}
+	// for block, signer := range s.Recents {
+	// 	cpy.Recents[block] = signer
+	// }
 	for address, tally := range s.Tally {
 		cpy.Tally[address] = tally
 	}
@@ -211,9 +212,9 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 			snap.Tally = make(map[common.Address]Tally)
 		}
 		// Delete the oldest signer from the recent list to allow it signing again
-		if limit := uint64(len(snap.Signers)/2 + 1); number >= limit {
-			delete(snap.Recents, number-limit)
-		}
+		// if limit := uint64(len(snap.Signers)/2 + 1); number >= limit {
+		// 	delete(snap.Recents, number-limit)
+		// }
 		// Resolve the authorization key and check against signers
 		signer, err := ecrecover(header, s.sigcache)
 		if err != nil {
@@ -222,12 +223,15 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		if _, ok := snap.Signers[signer]; !ok {
 			return nil, errUnauthorizedSigner
 		}
-		for _, recent := range snap.Recents {
-			if recent == signer {
-				return nil, errRecentlySigned
-			}
-		}
-		snap.Recents[number] = signer
+		// for _, recent := range snap.Recents {
+		// 	if recent == signer {
+		// 		return nil, errRecentlySigned
+		// 	}
+		// }
+
+		//bencq+
+		// snap.Recents[number] = signer
+		//bencq-
 
 		// Header authorized, discard any previous votes from the signer
 		for i, vote := range snap.Votes {
@@ -266,9 +270,9 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 				delete(snap.Signers, header.Coinbase)
 
 				// Signer list shrunk, delete any leftover recent caches
-				if limit := uint64(len(snap.Signers)/2 + 1); number >= limit {
-					delete(snap.Recents, number-limit)
-				}
+				// if limit := uint64(len(snap.Signers)/2 + 1); number >= limit {
+				// 	delete(snap.Recents, number-limit)
+				// }
 				// Discard any previous votes the deauthorized signer cast
 				for i := 0; i < len(snap.Votes); i++ {
 					if snap.Votes[i].Signer == header.Coinbase {
@@ -308,19 +312,22 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 
 // signers retrieves the list of authorized signers in ascending order.
 func (s *Snapshot) signers() []common.Address {
+	//bencq+
 	sigs := make([]common.Address, 0, len(s.Signers))
 	for sig := range s.Signers {
 		sigs = append(sigs, sig)
 	}
 	sort.Sort(signersAscending(sigs))
 	return sigs
+	//bencq-
 }
 
+// bencq+
 // inturn returns if a signer at a given block height is in-turn or not.
-func (s *Snapshot) inturn(number uint64, signer common.Address) bool {
+func (s *Snapshot) inturn(number uint64, signer common.Address) (bool, []common.Address) {
 	signers, offset := s.signers(), 0
 	for offset < len(signers) && signers[offset] != signer {
 		offset++
 	}
-	return (number % uint64(len(signers))) == uint64(offset)
+	return (number % uint64(len(signers))) == uint64(offset), signers
 }

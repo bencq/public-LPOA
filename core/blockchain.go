@@ -158,6 +158,9 @@ var defaultCacheConfig = &CacheConfig{
 // included in the canonical one where as GetBlockByNumber always represents the
 // canonical chain.
 type BlockChain struct {
+	//peilin
+	InsertEventChannel chan uint64
+
 	chainConfig *params.ChainConfig // Chain & network configuration
 	cacheConfig *CacheConfig        // Cache configuration for pruning
 
@@ -245,6 +248,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		futureBlocks:   futureBlocks,
 		engine:         engine,
 		vmConfig:       vmConfig,
+
+		// peilin
+		InsertEventChannel: make(chan uint64),
 	}
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
@@ -1064,10 +1070,13 @@ func (bc *BlockChain) procFutureBlocks() {
 			blocks = append(blocks, block.(*types.Block))
 		}
 	}
+	// log.Error("bencq: procFutureBlocks", "len(blocks)", len(blocks))
 	if len(blocks) > 0 {
+		// log.Error("bencq: procFutureBlocks bf sort.Slice")
 		sort.Slice(blocks, func(i, j int) bool {
 			return blocks[i].NumberU64() < blocks[j].NumberU64()
 		})
+		// log.Error("bencq: procFutureBlocks af sort.Slice")
 		// Insert one by one as chain insertion needs contiguous ancestry between blocks
 		for i := range blocks {
 			bc.InsertChain(blocks[i : i+1])
@@ -1651,10 +1660,21 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 //
 // After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+	// peilin
+	defer func() {
+		log.Error("bencq: InsertChain finished", "chain[len(chain)-1].NumberU64()", chain[len(chain)-1].NumberU64())
+		bc.InsertEventChannel <- chain[len(chain)-1].NumberU64()
+	}()
+
+	log.Error("bencq: InsertChain", "len(chain)", len(chain))
+
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
+		log.Error("bencq: InsertChain", "n", 0)
 		return 0, nil
 	}
+
+	log.Error("bencq: InsertChain", "chain[len(chain)-1].NumberU64()", chain[len(chain)-1].NumberU64())
 
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
@@ -1682,7 +1702,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	n, err := bc.insertChain(chain, true)
 	bc.chainmu.Unlock()
 	bc.wg.Done()
-
+	log.Error("bencq: InsertChain", "n", n)
 	return n, err
 }
 
@@ -1836,6 +1856,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			bc.reportBlock(block, nil, ErrBlacklistedHash)
 			return it.index, ErrBlacklistedHash
 		}
+
+		//bencq+
+		txCnt := len(block.Transactions())
+		log.Error("bencq: insertChain", "txCnt", txCnt)
+		//bencq-
+
 		// If the block is known (in the middle of the chain), it's a special case for
 		// Clique blocks where they can share state among each other, so importing an
 		// older block might complete the state of the subsequent one. In this case,
@@ -2305,7 +2331,13 @@ func (bc *BlockChain) update() {
 	for {
 		select {
 		case <-futureTimer.C:
+			//bencq+
+			// log.Error("bencq: bf <-futureTimer.C:")
+			//bencq-
 			bc.procFutureBlocks()
+			//bencq+
+			// log.Error("bencq: af <-futureTimer.C:")
+			//bencq-
 		case <-bc.quit:
 			return
 		}

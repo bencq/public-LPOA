@@ -141,6 +141,30 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 // makeFullNode loads geth configuration and creates the Ethereum backend.
 func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 	stack, cfg := makeConfigNode(ctx)
+
+	//bencq+
+	if ctx.IsSet(utils.EndPointsFlag.Name) {
+		cfg.Eth.EndPointsFlag = ctx.String(utils.EndPointsFlag.Name)
+		//log.Error("bencq:", "cfg.Eth.EndPointsFlag", cfg.Eth.EndPointsFlag)
+	}
+
+	if ctx.IsSet(utils.EndPointIndexFlag.Name) {
+		cfg.Eth.EndPointIndex = ctx.Int(utils.EndPointIndexFlag.Name)
+		//log.Error("bencq:", "cfg.Eth.EndPointIndex", cfg.Eth.EndPointIndex)
+	}
+
+	if ctx.IsSet(utils.EtherBasesFlag.Name) {
+		cfg.Eth.EtherBasesFlag = ctx.String(utils.EtherBasesFlag.Name)
+		//log.Error("bencq:", "cfg.Eth.EtherBasesFlag", cfg.Eth.EtherBasesFlag)
+	}
+
+	if ctx.IsSet(utils.OvertimeFlag.Name) {
+		cfg.Eth.OvertimeFlag = ctx.Int(utils.OvertimeFlag.Name)
+		//log.Error("bencq:", "cfg.Eth.OvertimeFlag", cfg.Eth.OvertimeFlag)
+	}
+
+	//bencq-
+
 	if ctx.GlobalIsSet(utils.OverrideBerlinFlag.Name) {
 		cfg.Eth.OverrideBerlin = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideBerlinFlag.Name))
 	}

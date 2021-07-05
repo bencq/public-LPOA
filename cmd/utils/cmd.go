@@ -193,6 +193,10 @@ func ImportChain(chain *core.BlockChain, fn string) error {
 			log.Info("Skipping batch as all blocks present", "batch", batch, "first", blocks[0].Hash(), "last", blocks[i-1].Hash())
 			continue
 		}
+		//log.Error("bencq: bf ImportChain")
+		defer func() {
+			//log.Error("bencq: af ImportChain")
+		}()
 		if _, err := chain.InsertChain(missing); err != nil {
 			return fmt.Errorf("invalid block %d: %v", n, err)
 		}

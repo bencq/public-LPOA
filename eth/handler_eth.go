@@ -107,6 +107,11 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 // handleHeaders is invoked from a peer's message handler when it transmits a batch
 // of headers for the local node to process.
 func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) error {
+	//log.Error("bencq: bf handleHeaders", "len(headers)", len(headers))
+	//defer log.Error("bencq: af handleHeaders", "len(headers)", len(headers))
+	if len(headers) != 0 {
+		//log.Error("bencq: bf handleHeaders", "lastHead.Number", headers[len(headers)-1].Number.Uint64())
+	}
 	p := h.peers.peer(peer.ID())
 	if p == nil {
 		return errors.New("unregistered during callback")
@@ -200,6 +205,7 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 // handleBlockBroadcast is invoked from a peer's message handler when it transmits a
 // block broadcast for the local node to process.
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
+	//log.Error("bencq: bf handleBlockBroadcast", "block.NumberU64()", block.NumberU64())
 	// Schedule the block for import
 	h.blockFetcher.Enqueue(peer.ID(), block)
 
@@ -214,5 +220,6 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 		peer.SetHead(trueHead, trueTD)
 		h.chainSync.handlePeerEvent(peer)
 	}
+	//log.Error("bencq: af handleBlockBroadcast", "block.NumberU64()", block.NumberU64())
 	return nil
 }

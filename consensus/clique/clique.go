@@ -64,8 +64,12 @@ var (
 
 	uncleHash = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
 
-	diffInTurn = big.NewInt(2) // Block difficulty for in-turn signatures
+	//bencq+
+	// diffInTurn = big.NewInt(2) // Block difficulty for in-turn signatures
+	diffInTurn = big.NewInt(1) // Block difficulty for in-turn signatures
+	//bencq-
 	diffNoTurn = big.NewInt(1) // Block difficulty for out-of-turn signatures
+
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -374,6 +378,7 @@ func (c *Clique) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 			if checkpoint != nil {
 				hash := checkpoint.Hash()
 
+				//bencq+
 				signers := make([]common.Address, (len(checkpoint.Extra)-extraVanity-extraSeal)/common.AddressLength)
 				for i := 0; i < len(signers); i++ {
 					copy(signers[i][:], checkpoint.Extra[extraVanity+i*common.AddressLength:])
@@ -384,6 +389,7 @@ func (c *Clique) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 				}
 				log.Info("Stored checkpoint snapshot to disk", "number", number, "hash", hash)
 				break
+				//bencq-
 			}
 		}
 		// No snapshot for this header, gather the header and move backward
@@ -458,17 +464,19 @@ func (c *Clique) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 	if _, ok := snap.Signers[signer]; !ok {
 		return errUnauthorizedSigner
 	}
-	for seen, recent := range snap.Recents {
-		if recent == signer {
-			// Signer is among recents, only fail if the current block doesn't shift it out
-			if limit := uint64(len(snap.Signers)/2 + 1); seen > number-limit {
-				return errRecentlySigned
-			}
-		}
-	}
+	//bencq+
+	// for seen, recent := range snap.Recents {
+	// 	if recent == signer {
+	// 		// Signer is among recents, only fail if the current block doesn't shift it out
+	// 		if limit := uint64(len(snap.Signers)/2 + 1); seen > number-limit {
+	// 			return errRecentlySigned
+	// 		}
+	// 	}
+	// }
+	//bencq-
 	// Ensure that the difficulty corresponds to the turn-ness of the signer
 	if !c.fakeDiff {
-		inturn := snap.inturn(header.Number.Uint64(), signer)
+		inturn, _ := snap.inturn(header.Number.Uint64(), signer)
 		if inturn && header.Difficulty.Cmp(diffInTurn) != 0 {
 			return errWrongDifficulty
 		}
@@ -478,6 +486,28 @@ func (c *Clique) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 	}
 	return nil
 }
+
+//bencq+
+
+//RetrieveInfo return leader, signers, inturn, err
+// called only once
+func (c *Clique) RetrieveInfo(chain consensus.ChainReader, header *types.Header, parents []*types.Header) (common.Address, []common.Address, bool, error) {
+
+	number := header.Number.Uint64()
+	////log.Error("bencq: RetrieveInfo: ", "number", number)
+	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
+	if err != nil {
+		return common.Address{}, nil, false, err
+	}
+	c.lock.RLock()
+	inturn, signers := snap.inturn(number, c.signer)
+	leader := signers[(number % uint64(len(signers)))]
+	////log.Error("bencq: RetrieveInfo: ", "c.signer", c.signer)
+	c.lock.RUnlock()
+	return leader, signers, inturn, nil
+}
+
+//bencq-
 
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
@@ -575,6 +605,18 @@ func (c *Clique) Authorize(signer common.Address, signFn SignerFn) {
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+
+	//bencq+
+	exBlkNumber := chain.CurrentHeader().Number.Uint64()
+	toBlkNumber := block.NumberU64()
+	////log.Error("bencq: Seal", "exBlkNumber", exBlkNumber, "toBlkNumber", toBlkNumber)
+	if toBlkNumber != exBlkNumber+1 {
+		////log.Error("bencq: Seal", "toBlkNumber != exBlkNumber + 1", toBlkNumber != exBlkNumber+1)
+		return nil
+	}
+
+	//bencq-
+
 	header := block.Header()
 
 	// Sealing the genesis block is not supported
@@ -587,6 +629,10 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 		log.Info("Sealing paused, waiting for transactions")
 		return nil
 	}
+	//bencq+
+	txCnt := len(block.Transactions())
+	log.Error("bencq: Seal", "txCnt", txCnt)
+	//bencq-
 	// Don't hold the signer fields for the entire sealing procedure
 	c.lock.RLock()
 	signer, signFn := c.signer, c.signFn
@@ -595,47 +641,58 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 	// Bail out if we're unauthorized to sign a block
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
 	if err != nil {
+		////log.Error("bencq: Seal c.snap err != nil")
 		return err
 	}
 	if _, authorized := snap.Signers[signer]; !authorized {
+		////log.Error("bencq: Seal errUnauthorizedSigner")
 		return errUnauthorizedSigner
 	}
 	// If we're amongst the recent signers, wait for the next block
-	for seen, recent := range snap.Recents {
-		if recent == signer {
-			// Signer is among recents, only wait if the current block doesn't shift it out
-			if limit := uint64(len(snap.Signers)/2 + 1); number < limit || seen > number-limit {
-				log.Info("Signed recently, must wait for others")
-				return nil
-			}
-		}
-	}
+	// for seen, recent := range snap.Recents {
+	// 	if recent == signer {
+	// 		// Signer is among recents, only wait if the current block doesn't shift it out
+	// 		if limit := uint64(len(snap.Signers)/2 + 1); number < limit || seen > number-limit {
+	// 			////log.Error("bencq: Seal Signed recently, must wait for others")
+	// 			log.Info("Signed recently, must wait for others")
+	// 			return nil
+	// 		}
+	// 	}
+	// }
 	// Sweet, the protocol permits us to sign the block, wait for our time
 	delay := time.Unix(int64(header.Time), 0).Sub(time.Now()) // nolint: gosimple
-	if header.Difficulty.Cmp(diffNoTurn) == 0 {
-		// It's not our turn explicitly to sign, delay it a bit
-		wiggle := time.Duration(len(snap.Signers)/2+1) * wiggleTime
-		delay += time.Duration(rand.Int63n(int64(wiggle)))
 
-		log.Trace("Out-of-turn signing requested", "wiggle", common.PrettyDuration(wiggle))
-	}
+	//bencq+
+	//disable delay
+	// if header.Difficulty.Cmp(diffNoTurn) == 0 {
+	// 	// It's not our turn explicitly to sign, delay it a bit
+	// 	wiggle := time.Duration(len(snap.Signers)/2+1) * wiggleTime
+	// 	delay += time.Duration(rand.Int63n(int64(wiggle)))
+
+	// 	log.Trace("Out-of-turn signing requested", "wiggle", common.PrettyDuration(wiggle))
+	// }
+	//bencq-
 	// Sign all the things!
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeClique, CliqueRLP(header))
 	if err != nil {
+		////log.Error("bencq: Seal signFn err != nil")
 		return err
 	}
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
 	go func() {
+		////log.Error("bencq: Seal go func", "header.Number.Uint64()", header.Number.Uint64())
 		select {
 		case <-stop:
+			////log.Error("bencq: Seal case stop")
 			return
 		case <-time.After(delay):
 		}
 
 		select {
 		case results <- block.WithSeal(header):
+			////log.Error("bencq: results <- block.WithSeal(header)", "header.Number.Uint64()", header.Number.Uint64())
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", SealHash(header))
 		}
@@ -656,10 +713,15 @@ func (c *Clique) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, 
 	return calcDifficulty(snap, c.signer)
 }
 
+// CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
+// that a new block should have based on the previous blocks in the chain and the
+// current signer.
 func calcDifficulty(snap *Snapshot, signer common.Address) *big.Int {
-	if snap.inturn(snap.Number+1, signer) {
+	//bencq+
+	if inturn, _ := snap.inturn(snap.Number+1, signer); inturn {
 		return new(big.Int).Set(diffInTurn)
 	}
+	//bencq-
 	return new(big.Int).Set(diffNoTurn)
 }
 

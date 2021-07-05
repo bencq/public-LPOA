@@ -213,7 +213,9 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			log.Warn("Fast syncing, discarded propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
 			return 0, nil
 		}
+		//log.Error("bencq: bf inserter InsertChain")
 		n, err := h.chain.InsertChain(blocks)
+		//log.Error("bencq: af inserter InsertChain")
 		if err == nil {
 			atomic.StoreUint32(&h.acceptTxs, 1) // Mark initial sync done on any fetcher import
 		}
@@ -236,17 +238,26 @@ func newHandler(config *handlerConfig) (*handler, error) {
 // runEthPeer registers an eth peer into the joint eth/snap peerset, adds it to
 // various subsistems and starts handling messages.
 func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
+	//bencq+
+	//log.Error("bencq: runEthPeer: bf")
+	//bencq-
+	//defer log.Error("bencq: runEthPeer: af")
+
 	// If the peer has a `snap` extension, wait for it to connect so we can have
 	// a uniform initialization/teardown mechanism
+	//log.Error("bencq: runEthPeer: h.peers.waitSnapExtension bf")
 	snap, err := h.peers.waitSnapExtension(peer)
 	if err != nil {
 		peer.Log().Error("Snapshot extension barrier failed", "err", err)
 		return err
 	}
+	//log.Error("bencq: runEthPeer: h.peers.waitSnapExtension af")
 	// TODO(karalabe): Not sure why this is needed
+	//log.Error("bencq: runEthPeer: handlePeerEvent 1 bf")
 	if !h.chainSync.handlePeerEvent(peer) {
 		return p2p.DiscQuitting
 	}
+	//log.Error("bencq: runEthPeer: handlePeerEvent 1 af")
 	h.peerWG.Add(1)
 	defer h.peerWG.Done()
 
@@ -258,6 +269,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		number  = head.Number.Uint64()
 		td      = h.chain.GetTd(hash, number)
 	)
+	//log.Error("bencq: runEthPeer: lots of work bf")
 	forkID := forkid.NewID(h.chain.Config(), h.chain.Genesis().Hash(), h.chain.CurrentHeader().Number.Uint64())
 	if err := peer.Handshake(h.networkID, td, hash, genesis.Hash(), forkID, h.forkFilter); err != nil {
 		peer.Log().Debug("Ethereum handshake failed", "err", err)
@@ -280,8 +292,10 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			return p2p.DiscTooManyPeers
 		}
 	}
+	//log.Error("bencq: runEthPeer: lots of work af")
 	peer.Log().Debug("Ethereum peer connected", "name", peer.Name())
 
+	//log.Error("bencq: runEthPeer: lots of peers job bf")
 	// Register the peer locally
 	if err := h.peers.registerPeer(peer, snap); err != nil {
 		peer.Log().Error("Ethereum peer registration failed", "err", err)
@@ -304,12 +318,18 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			return err
 		}
 	}
+	//log.Error("bencq: runEthPeer: lots of peers job af")
+	//log.Error("bencq: runEthPeer: handlePeerEvent 2 bf")
 	h.chainSync.handlePeerEvent(peer)
+	//log.Error("bencq: runEthPeer: handlePeerEvent 2 af")
 
+	//log.Error("bencq: runEthPeer: syncTransactions bf")
 	// Propagate existing transactions. new transactions appearing
 	// after this will be sent via broadcasts.
 	h.syncTransactions(peer)
+	//log.Error("bencq: runEthPeer: syncTransactions af")
 
+	//log.Error("bencq: runEthPeer: req 1 bf")
 	// If we have a trusted CHT, reject all peers below that (avoid fast sync eclipse)
 	if h.checkpointHash != (common.Hash{}) {
 		// Request the peer's checkpoint header for chain height/weight validation
@@ -329,12 +349,15 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			}
 		}()
 	}
+	//log.Error("bencq: runEthPeer: req 1 af")
+	//log.Error("bencq: runEthPeer: req 2 bf")
 	// If we have any explicit whitelist block hashes, request them
 	for number := range h.whitelist {
 		if err := peer.RequestHeadersByNumber(number, 1, 0, false); err != nil {
 			return err
 		}
 	}
+	//log.Error("bencq: runEthPeer: req 2 af")
 	// Handle incoming messages until the connection is torn down
 	return handler(peer)
 }
@@ -357,6 +380,7 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 // removePeer unregisters a peer from the downloader and fetchers, removes it from
 // the set of tracked peers and closes the network connection to it.
 func (h *handler) removePeer(id string) {
+	//log.Error("bencq: removePeer:", "id", id)
 	// Create a custom logger to avoid printing the entire id
 	var logger log.Logger
 	if len(id) < 16 {
@@ -446,6 +470,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 		// Send the block to a subset of our peers
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
+			//log.Error("bencq: BroadcastBlock", "block.NumberU64()", block.NumberU64(), "peer", peer.Info().Enode)
 			peer.AsyncSendNewBlock(block, td)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
@@ -509,8 +534,10 @@ func (h *handler) minedBroadcastLoop() {
 
 	for obj := range h.minedBlockSub.Chan() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
+			//log.Error("bencq: minedBroadcastLoop: bf h.BroadcastBlock", "ev.Block.NumberU64()", ev.Block.NumberU64())
 			h.BroadcastBlock(ev.Block, true)  // First propagate block to peers
 			h.BroadcastBlock(ev.Block, false) // Only then announce to the rest
+			//log.Error("bencq: minedBroadcastLoop: af h.BroadcastBlock", "ev.Block.NumberU64()", ev.Block.NumberU64())
 		}
 	}
 }

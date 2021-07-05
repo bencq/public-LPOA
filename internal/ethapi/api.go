@@ -971,10 +971,12 @@ func DoEstimateGas(ctx context.Context, b Backend, args CallArgs, blockNrOrHash 
 		hi = uint64(*args.Gas)
 	} else {
 		// Retrieve the block to act as the gas ceiling
+		//log.Error("bencq: ", "blockNrOrHash", blockNrOrHash)
 		block, err := b.BlockByNumberOrHash(ctx, blockNrOrHash)
 		if err != nil {
 			return 0, err
 		}
+		//log.Error("bencq: ", "block", block)
 		if block == nil {
 			return 0, errors.New("block not found")
 		}

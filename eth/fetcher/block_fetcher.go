@@ -341,6 +341,7 @@ func (f *BlockFetcher) loop() {
 	defer completeTimer.Stop()
 
 	for {
+		log.Error("bencq: loop: bf for")
 		// Clean up any expired block fetches
 		for hash, announce := range f.fetching {
 			if time.Since(announce.time) > fetchTimeout {
@@ -350,7 +351,9 @@ func (f *BlockFetcher) loop() {
 		// Import any queued blocks that could potentially fit
 		height := f.chainHeight()
 		for !f.queue.Empty() {
+			log.Error("bencq: loop: bf queue")
 			op := f.queue.PopItem().(*blockOrHeaderInject)
+			log.Error("bencq: loop: ", "op.block.NumberU64()", op.block.NumberU64())
 			hash := op.hash()
 			if f.queueChangeHook != nil {
 				f.queueChangeHook(hash, false)
@@ -374,8 +377,11 @@ func (f *BlockFetcher) loop() {
 			} else {
 				f.importBlocks(op.origin, op.block)
 			}
+			log.Error("bencq: loop: af queue")
 		}
+		log.Error("bencq: loop: af for")
 		// Wait for an outside event to occur
+		log.Error("bencq: loop: bf select")
 		select {
 		case <-f.quit:
 			// BlockFetcher terminating, abort all operations
@@ -661,6 +667,7 @@ func (f *BlockFetcher) loop() {
 				}
 			}
 		}
+		log.Error("bencq: loop: af select")
 	}
 }
 
@@ -705,6 +712,13 @@ func (f *BlockFetcher) rescheduleComplete(complete *time.Timer) {
 // enqueue schedules a new header or block import operation, if the component
 // to be imported has not yet been seen.
 func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.Block) {
+	stTime := time.Now()
+	log.Error("bencq: enqueue bf")
+	defer func() {
+		edTime := time.Now()
+		elapsed := edTime.Sub(stTime)
+		log.Error("bencq: enqueue af", "elapsed", elapsed)
+	}()
 	var (
 		hash   common.Hash
 		number uint64
@@ -797,6 +811,9 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			log.Debug("Unknown parent of propagated block", "peer", peer, "number", block.Number(), "hash", hash, "parent", block.ParentHash())
 			return
 		}
+		//bencq+
+		log.Error("bencq: importBlocks: bf verifyHeader")
+		//bencq-
 		// Quickly validate the header and propagate the block if it passes
 		switch err := f.verifyHeader(block.Header()); err {
 		case nil:
@@ -813,6 +830,7 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			f.dropPeer(peer)
 			return
 		}
+		log.Error("bencq: importBlocks: af verifyHeader")
 		// Run the actual import and log any issues
 		if _, err := f.insertChain(types.Blocks{block}); err != nil {
 			log.Debug("Propagated block import failed", "peer", peer, "number", block.Number(), "hash", hash, "err", err)

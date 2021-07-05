@@ -107,6 +107,34 @@ func printHelp(out io.Writer, templ string, data interface{}) {
 // are the same for all commands.
 
 var (
+	// bencq+
+
+	EndPointsFlag = cli.StringFlag{
+		Name:  "endpoints",
+		Usage: "endpoints of all peers including this peer, seperated by comma. e.g, '192.186.1.1:30303,192.186.1.1:30304' means two endpoints, one of which belongs to this peer",
+		Value: "",
+	}
+
+	EtherBasesFlag = cli.StringFlag{
+		Name:  "etherbases",
+		Usage: "etherbases correspond to endpoints",
+		Value: "",
+	}
+
+	EndPointIndexFlag = cli.IntFlag{
+		Name:  "endpointIndex",
+		Usage: "the endpoint index of [endpoints] of this peer",
+		Value: 0,
+	}
+
+	OvertimeFlag = cli.IntFlag{
+		Name:  "overtime",
+		Usage: "overtime of lock given out, unit: ms",
+		Value: 1000,
+	}
+
+	// bencq-
+
 	// General settings
 	DataDirFlag = DirectoryFlag{
 		Name:  "datadir",

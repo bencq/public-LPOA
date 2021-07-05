@@ -113,6 +113,12 @@ func MakeProtocols(backend Backend, dnsdisc enode.Iterator) []p2p.Protocol {
 // handle is the callback invoked to manage the life cycle of a `snap` peer.
 // When this function terminates, the peer is disconnected.
 func handle(backend Backend, peer *Peer) error {
+	stTime := time.Now()
+	//log.Error("bencq: Handle snap bf")
+	defer func() {
+		elapsed := time.Since(stTime)
+		log.Error("bencq: Handle snap af", "elapsed", elapsed)
+	}()
 	for {
 		if err := handleMessage(backend, peer); err != nil {
 			peer.Log().Debug("Message handling failed in `snap`", "err", err)

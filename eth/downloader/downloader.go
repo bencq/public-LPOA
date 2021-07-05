@@ -368,6 +368,7 @@ func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int, mode 
 // it will use the best peer possible and synchronize if its TD is higher than our own. If any of the
 // checks fail an error will be returned. This method is synchronous
 func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode SyncMode) error {
+	//log.Error("bencq: bf synchronise")
 	// Mock out the synchronisation if testing
 	if d.synchroniseMock != nil {
 		return d.synchroniseMock(id, hash)
@@ -471,7 +472,13 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	}(time.Now())
 
 	// Look up the sync boundaries: the common ancestor and the target block
+	//bencq+
+	//log.Error("bencq: bf d.fetchHead(p)")
+	//bencq-
 	latest, pivot, err := d.fetchHead(p)
+	//bencq+
+	//log.Error("bencq: af d.fetchHead(p)")
+	//bencq-
 	if err != nil {
 		return err
 	}
@@ -578,6 +585,14 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
 func (d *Downloader) spawnSync(fetchers []func() error) error {
+	//bencq+
+	//log.Error("bencq: bf spawnSync")
+	defer func() {
+		//bencq+
+		//log.Error("bencq: af spawnSync")
+		//bencq-
+	}()
+	//bencq-
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
@@ -701,6 +716,7 @@ func (d *Downloader) fetchHead(p *peerConnection) (head *types.Header, pivot *ty
 			return head, pivot, nil
 
 		case <-timeout:
+			//log.Error("bencq: Waiting for head header timed out", "elapsed", ttl)
 			p.log.Debug("Waiting for head header timed out", "elapsed", ttl)
 			return nil, nil, errTimeout
 
@@ -898,6 +914,7 @@ func (d *Downloader) findAncestorSpanSearch(p *peerConnection, mode SyncMode, re
 			}
 
 		case <-timeout:
+			//log.Error("bencq: Waiting for head header timed out", "elapsed", ttl)
 			p.log.Debug("Waiting for head header timed out", "elapsed", ttl)
 			return 0, errTimeout
 
@@ -983,6 +1000,7 @@ func (d *Downloader) findAncestorBinarySearch(p *peerConnection, mode SyncMode, 
 				hash = h
 
 			case <-timeout:
+				//log.Error("bencq: Waiting for search header timed out", "elapsed", ttl)
 				p.log.Debug("Waiting for search header timed out", "elapsed", ttl)
 				return 0, errTimeout
 
@@ -1450,6 +1468,7 @@ func (d *Downloader) fetchParts(deliveryCh chan dataPack, deliver func(dataPack)
 
 							if master {
 								d.cancel()
+								//log.Error("bencq: fetchParts if master  errTimeout")
 								return errTimeout
 							}
 						}
@@ -1713,6 +1732,7 @@ func (d *Downloader) processFullSyncContent() error {
 }
 
 func (d *Downloader) importBlockResults(results []*fetchResult) error {
+	//log.Error("bencq: bf importBlockResults:")
 	// Check for any early termination requests
 	if len(results) == 0 {
 		return nil

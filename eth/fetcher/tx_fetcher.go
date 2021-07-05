@@ -261,6 +261,13 @@ func (f *TxFetcher) Notify(peer string, hashes []common.Hash) error {
 // direct request replies. The differentiation is important so the fetcher can
 // re-shedule missing transactions as soon as possible.
 func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) error {
+	// stTime := time.Now()
+	//log.Error("bencq: Enqueue bf")
+	// defer func() {
+	// 	edTime := time.Now()
+	// 	elapsed := edTime.Sub(stTime)
+	// 	log.Error("bencq: Enqueue af", "elapsed", elapsed)
+	// }()
 	// Keep track of all the propagated transactions
 	if direct {
 		txReplyInMeter.Mark(int64(len(txs)))

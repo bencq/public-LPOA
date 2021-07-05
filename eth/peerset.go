@@ -152,7 +152,11 @@ func (ps *peerSet) registerPeer(peer *eth.Peer, ext *snap.Peer) error {
 		eth.snapExt = &snapPeer{ext}
 		ps.snapPeers++
 	}
+	//bencq+
+	//log.Error("bencq: registerPeer", "id", id, "eth", eth)
+	//bencq-
 	ps.peers[id] = eth
+
 	return nil
 }
 
@@ -166,6 +170,9 @@ func (ps *peerSet) unregisterPeer(id string) error {
 	if !ok {
 		return errPeerNotRegistered
 	}
+	//bencq+
+	//log.Error("bencq: unregisterPeer", "id", id, "eth", ps.peers[id])
+	//bencq-
 	delete(ps.peers, id)
 	if peer.snapExt != nil {
 		ps.snapPeers--

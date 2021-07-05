@@ -29,6 +29,8 @@ import (
 
 // handleGetBlockHeaders handles Block header query, collect the requested headers and reply
 func handleGetBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetBlockHeaders")
+	//defer log.Error("bencq: af handleGetBlockHeaders")
 	// Decode the complex header query
 	var query GetBlockHeadersPacket
 	if err := msg.Decode(&query); err != nil {
@@ -40,6 +42,8 @@ func handleGetBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 
 // handleGetBlockHeaders66 is the eth/66 version of handleGetBlockHeaders
 func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetBlockHeaders66")
+	//defer log.Error("bencq: af handleGetBlockHeaders66")
 	// Decode the complex header query
 	var query GetBlockHeadersPacket66
 	if err := msg.Decode(&query); err != nil {
@@ -136,6 +140,8 @@ func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, p
 }
 
 func handleGetBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetBlockBodies")
+	//defer log.Error("bencq: af handleGetBlockBodies")
 	// Decode the block body retrieval message
 	var query GetBlockBodiesPacket
 	if err := msg.Decode(&query); err != nil {
@@ -146,6 +152,8 @@ func handleGetBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleGetBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetBlockBodies66")
+	//defer log.Error("bencq: af handleGetBlockBodies66")
 	// Decode the block body retrieval message
 	var query GetBlockBodiesPacket66
 	if err := msg.Decode(&query); err != nil {
@@ -175,6 +183,8 @@ func answerGetBlockBodiesQuery(backend Backend, query GetBlockBodiesPacket, peer
 }
 
 func handleGetNodeData(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetNodeData")
+	//defer log.Error("bencq: af handleGetNodeData")
 	// Decode the trie node data retrieval message
 	var query GetNodeDataPacket
 	if err := msg.Decode(&query); err != nil {
@@ -185,6 +195,8 @@ func handleGetNodeData(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleGetNodeData66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetNodeData66")
+	//defer log.Error("bencq: af handleGetNodeData66")
 	// Decode the trie node data retrieval message
 	var query GetNodeDataPacket66
 	if err := msg.Decode(&query); err != nil {
@@ -224,6 +236,8 @@ func answerGetNodeDataQuery(backend Backend, query GetNodeDataPacket, peer *Peer
 }
 
 func handleGetReceipts(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetReceipts")
+	//defer log.Error("bencq: af handleGetReceipts")
 	// Decode the block receipts retrieval message
 	var query GetReceiptsPacket
 	if err := msg.Decode(&query); err != nil {
@@ -234,6 +248,8 @@ func handleGetReceipts(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleGetReceipts66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetReceipts66")
+	//defer log.Error("bencq: af handleGetReceipts66")
 	// Decode the block receipts retrieval message
 	var query GetReceiptsPacket66
 	if err := msg.Decode(&query); err != nil {
@@ -273,6 +289,8 @@ func answerGetReceiptsQuery(backend Backend, query GetReceiptsPacket, peer *Peer
 }
 
 func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleNewBlockhashes")
+	//defer log.Error("bencq: af handleNewBlockhashes")
 	// A batch of new block announcements just arrived
 	ann := new(NewBlockHashesPacket)
 	if err := msg.Decode(ann); err != nil {
@@ -287,6 +305,8 @@ func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleNewBlock")
+	//defer log.Error("bencq: af handleNewBlock")
 	// Retrieve and decode the propagated block
 	ann := new(NewBlockPacket)
 	if err := msg.Decode(ann); err != nil {
@@ -313,6 +333,8 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleBlockHeaders")
+	//defer log.Error("bencq: af handleBlockHeaders")
 	// A batch of headers arrived to one of our previous requests
 	res := new(BlockHeadersPacket)
 	if err := msg.Decode(res); err != nil {
@@ -322,6 +344,8 @@ func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleBlockHeaders66")
+	//defer log.Error("bencq: af handleBlockHeaders66")
 	// A batch of headers arrived to one of our previous requests
 	res := new(BlockHeadersPacket66)
 	if err := msg.Decode(res); err != nil {
@@ -333,6 +357,8 @@ func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleBlockBodies")
+	//defer log.Error("bencq: af handleBlockBodies")
 	// A batch of block bodies arrived to one of our previous requests
 	res := new(BlockBodiesPacket)
 	if err := msg.Decode(res); err != nil {
@@ -342,6 +368,8 @@ func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleBlockBodies66")
+	//defer log.Error("bencq: af handleBlockBodies66")
 	// A batch of block bodies arrived to one of our previous requests
 	res := new(BlockBodiesPacket66)
 	if err := msg.Decode(res); err != nil {
@@ -353,6 +381,8 @@ func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleNodeData")
+	//defer log.Error("bencq: af handleNodeData")
 	// A batch of node state data arrived to one of our previous requests
 	res := new(NodeDataPacket)
 	if err := msg.Decode(res); err != nil {
@@ -362,6 +392,8 @@ func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleNodeData66")
+	//defer log.Error("bencq: af handleNodeData66")
 	// A batch of node state data arrived to one of our previous requests
 	res := new(NodeDataPacket66)
 	if err := msg.Decode(res); err != nil {
@@ -373,6 +405,8 @@ func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleReceipts")
+	//defer log.Error("bencq: af handleReceipts")
 	// A batch of receipts arrived to one of our previous requests
 	res := new(ReceiptsPacket)
 	if err := msg.Decode(res); err != nil {
@@ -382,6 +416,8 @@ func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleReceipts66")
+	//defer log.Error("bencq: af handleReceipts66")
 	// A batch of receipts arrived to one of our previous requests
 	res := new(ReceiptsPacket66)
 	if err := msg.Decode(res); err != nil {
@@ -393,6 +429,8 @@ func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleNewPooledTransactionHashes")
+	//defer log.Error("bencq: af handleNewPooledTransactionHashes")
 	// New transaction announcement arrived, make sure we have
 	// a valid and fresh chain to handle them
 	if !backend.AcceptTxs() {
@@ -410,6 +448,8 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 }
 
 func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetPooledTransactions")
+	//defer log.Error("bencq: af handleGetPooledTransactions")
 	// Decode the pooled transactions retrieval message
 	var query GetPooledTransactionsPacket
 	if err := msg.Decode(&query); err != nil {
@@ -420,6 +460,8 @@ func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error
 }
 
 func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleGetPooledTransactions66")
+	//defer log.Error("bencq: af handleGetPooledTransactions66")
 	// Decode the pooled transactions retrieval message
 	var query GetPooledTransactionsPacket66
 	if err := msg.Decode(&query); err != nil {
@@ -458,6 +500,8 @@ func answerGetPooledTransactions(backend Backend, query GetPooledTransactionsPac
 }
 
 func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handleTransactions")
+	//defer log.Error("bencq: af handleTransactions")
 	// Transactions arrived, make sure we have a valid and fresh chain to handle them
 	if !backend.AcceptTxs() {
 		return nil
@@ -478,6 +522,8 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handlePooledTransactions")
+	//defer log.Error("bencq: af handlePooledTransactions")
 	// Transactions arrived, make sure we have a valid and fresh chain to handle them
 	if !backend.AcceptTxs() {
 		return nil
@@ -498,6 +544,8 @@ func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
+	//log.Error("bencq: bf handlePooledTransactions66")
+	//defer log.Error("bencq: af handlePooledTransactions66")
 	// Transactions arrived, make sure we have a valid and fresh chain to handle them
 	if !backend.AcceptTxs() {
 		return nil

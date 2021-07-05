@@ -18,8 +18,13 @@ package miner
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"math/big"
+	"math/rand"
+	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +32,7 @@ import (
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -63,7 +69,9 @@ const (
 
 	// maxRecommitInterval is the maximum time interval to recreate the mining block with
 	// any newly arrived transactions.
-	maxRecommitInterval = 15 * time.Second
+	//bencq+
+	maxRecommitInterval = 3 * time.Second
+	//bencq-
 
 	// intervalAdjustRatio is the impact a single interval adjustment has on sealing work
 	// resubmitting interval.
@@ -74,7 +82,9 @@ const (
 	intervalAdjustBias = 200 * 1000.0 * 1000.0
 
 	// staleThreshold is the maximum depth of the acceptable stale block.
-	staleThreshold = 7
+	//bencq+
+	staleThreshold = 1
+	//bencq-
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -128,6 +138,10 @@ type worker struct {
 	engine      consensus.Engine
 	eth         Backend
 	chain       *core.BlockChain
+
+	//bencq+
+	lockHelper *LockHelper
+	//bencq-
 
 	// Feeds
 	pendingLogsFeed event.Feed
@@ -187,6 +201,252 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 }
 
+//bencq+
+
+// ReqBody is a struct of request for json unmarshal
+type ReqBody struct {
+	ToBlkNumber uint64 `json:"toBlkNumber"`
+}
+
+// LockHelper is a struct for lock based POA
+type LockHelper struct {
+	serverMux *http.ServeMux
+
+	lockVal *int32
+	lockMu  sync.Mutex
+
+	endpoints     []string
+	endpointIndex int
+	etherbases    []common.Address
+	eb2endpts     map[common.Address]string
+	overtime      int // unit: ms
+
+}
+
+func newLockHelper(config *Config, exBlkNumber uint64) *LockHelper {
+	ret := &LockHelper{
+		serverMux: nil,
+
+		endpoints:     config.Endpts,
+		endpointIndex: config.EndptsIndex,
+		etherbases:    config.Etherbases,
+		eb2endpts:     make(map[common.Address]string),
+		overtime:      config.Overtime,
+	}
+	log.Error("bencq: newLockHelper:", "lock: in", exBlkNumber)
+	for ind := range ret.endpoints {
+		ret.eb2endpts[ret.etherbases[ind]] = ret.endpoints[ind]
+	}
+	return ret
+}
+
+// handle functions here
+
+func (w *worker) HandleGetLockFromFollower(resp http.ResponseWriter, req *http.Request) {
+
+	bodyData, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		//log.Error("bencq: HandleGetLockFromFollower: ioutil.ReadAll", "err", err)
+	}
+	var reqBody ReqBody
+	err = json.Unmarshal(bodyData, &reqBody)
+	if err != nil {
+		//log.Error("bencq: HandleGetLockFromFollower: json.Unmarshal", "err", err)
+	}
+	toBlkNumber := reqBody.ToBlkNumber
+
+	if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
+		resp.WriteHeader(http.StatusForbidden)
+		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+	} else {
+		w.lockHelper.lockMu.Lock()
+		if *w.lockHelper.lockVal == 1 {
+			resp.WriteHeader(http.StatusForbidden)
+			log.Error("bencq: HandleGetLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
+		} else {
+			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
+			if toBlkNumber != exBlkNumber+1 {
+				resp.WriteHeader(http.StatusForbidden)
+				log.Error("bencq: HandleGetLockFromFollower: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
+			} else {
+				atomic.StoreInt32(w.lockHelper.lockVal, 1)
+				log.Error("bencq: HandleGetLockFromFollower: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
+				resp.WriteHeader(http.StatusOK)
+			}
+		}
+		w.lockHelper.lockMu.Unlock()
+	}
+}
+
+func (w *worker) HandleGrabLockFromLeader(resp http.ResponseWriter, req *http.Request) {
+
+	bodyData, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		//log.Error("bencq: HandleGrabLockFromLeader: ioutil.ReadAll", "err", err)
+	}
+	var reqBody ReqBody
+	err = json.Unmarshal(bodyData, &reqBody)
+	if err != nil {
+		//log.Error("bencq: HandleGrabLockFromLeader: json.Unmarshal", "err", err)
+	}
+	toBlkNumber := reqBody.ToBlkNumber
+
+	if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
+		resp.WriteHeader(http.StatusForbidden)
+		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+	} else {
+		w.lockHelper.lockMu.Lock()
+		if *w.lockHelper.lockVal == 1 {
+			resp.WriteHeader(http.StatusForbidden)
+			log.Error("bencq: HandleGrabLockFromLeader: af lockMu", "resp.WriteHeader", http.StatusForbidden)
+		} else {
+			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
+			if toBlkNumber != exBlkNumber+1 {
+				resp.WriteHeader(http.StatusForbidden)
+				log.Error("bencq: HandleGrabLockFromLeader: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
+			} else {
+				atomic.StoreInt32(w.lockHelper.lockVal, 1)
+				log.Error("bencq: HandleGrabLockFromLeader: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
+				resp.WriteHeader(http.StatusOK)
+			}
+		}
+		w.lockHelper.lockMu.Unlock()
+	}
+
+}
+
+func (w *worker) HandleGrabLockFromFollower(resp http.ResponseWriter, req *http.Request) {
+
+	bodyData, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		//log.Error("bencq: HandleGrabLockFromFollower: ioutil.ReadAll", "err", err)
+	}
+	var reqBody ReqBody
+	err = json.Unmarshal(bodyData, &reqBody)
+	if err != nil {
+		//log.Error("bencq: HandleGrabLockFromFollower: json.Unmarshal", "err", err)
+	}
+	toBlkNumber := reqBody.ToBlkNumber
+
+	if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
+		resp.WriteHeader(http.StatusForbidden)
+		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+	} else {
+		w.lockHelper.lockMu.Lock()
+		if *w.lockHelper.lockVal == 1 {
+			resp.WriteHeader(http.StatusForbidden)
+			log.Error("bencq: HandleGrabLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
+		} else {
+			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
+			if toBlkNumber != exBlkNumber+1 {
+				resp.WriteHeader(http.StatusForbidden)
+				log.Error("bencq: HandleGrabLockFromFollower: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
+			} else {
+				atomic.StoreInt32(w.lockHelper.lockVal, 1)
+				log.Error("bencq: HandleGrabLockFromFollower: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
+				resp.WriteHeader(http.StatusOK)
+			}
+		}
+		w.lockHelper.lockMu.Unlock()
+	}
+
+}
+
+func (w *worker) HandleReturnLock(resp http.ResponseWriter, req *http.Request) {
+
+	bodyData, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		log.Error("bencq: HandleReturnLock: ioutil.ReadAll", "err", err)
+	}
+	var reqBody ReqBody
+	err = json.Unmarshal(bodyData, &reqBody)
+	if err != nil {
+		log.Error("bencq: HandleReturnLock: json.Unmarshal", "err", err)
+	}
+	toBlkNumber := reqBody.ToBlkNumber
+
+	if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
+		resp.WriteHeader(http.StatusForbidden)
+		log.Error("bencq: HandleReturnLock: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+	} else {
+		w.lockHelper.lockMu.Lock()
+		if *w.lockHelper.lockVal == 0 {
+			resp.WriteHeader(http.StatusForbidden)
+			log.Error("bencq: HandleReturnLock: af lockMu: ", "resp.WriteHeader", http.StatusForbidden)
+		} else {
+			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
+			if toBlkNumber != exBlkNumber+1 {
+				log.Error("bencq: HandleReturnLock: ", "resp.WriteHeader", http.StatusForbidden)
+				resp.WriteHeader(http.StatusForbidden)
+			} else {
+				atomic.StoreInt32(w.lockHelper.lockVal, 0)
+				log.Error("bencq: HandleReturnLock: tlock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+			}
+		}
+		w.lockHelper.lockMu.Unlock()
+	}
+}
+
+func (w *worker) newLockServerMux() *http.ServeMux {
+	//log.Error("bencq: newLockServerMux: ")
+	rand.Seed(time.Now().UnixNano())
+	sm := http.NewServeMux()
+
+	sm.HandleFunc("/"+GetLockFromFollower, w.HandleGetLockFromFollower)
+	sm.HandleFunc("/"+GrabLockFromLeader, w.HandleGrabLockFromLeader)
+	sm.HandleFunc("/"+GrabLockFromFollower, w.HandleGrabLockFromFollower)
+	sm.HandleFunc("/"+ReturnLock, w.HandleReturnLock)
+	sm.HandleFunc("/", func(resp http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
+			resp.Write([]byte(http.MethodPost))
+			resp.WriteHeader(http.StatusOK)
+		case http.MethodGet:
+			resp.Write([]byte(http.MethodGet))
+			resp.WriteHeader(http.StatusOK)
+		default:
+			resp.Write([]byte("none method"))
+			resp.WriteHeader(http.StatusOK)
+		}
+	})
+
+	return sm
+}
+
+func (w *worker) overtimeResumeLock(message string) {
+	// time.Sleep(time.Duration(w.config.Overtime) * time.Millisecond)
+	// //log.Error("bencq: overtimeResumeLock:", "message", message)
+	// if len(w.lockHelper.lockChan) == 0 {
+	// 	//log.Error("bencq: overtimeResumelock: in1")
+	// 	w.lockHelper.lockChan <- 1
+	// }
+
+}
+
+//peilin
+func (w *worker) insertResumeLockLoop() {
+	for {
+		insertNumber := <-w.chain.InsertEventChannel
+		log.Error("bencq: insertResumeLockLoop: ", "insertNumber", insertNumber)
+		exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
+
+		if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
+			log.Error("bencq: insertResumeLockLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+		} else {
+			w.lockHelper.lockMu.Lock()
+			if *w.lockHelper.lockVal == 0 {
+				log.Error("bencq: insertResumeLockLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+			} else {
+				atomic.StoreInt32(w.lockHelper.lockVal, 0)
+				log.Error("bencq: insertResumeLockLoop: tlock: out", "exBlkNumber", exBlkNumber)
+			}
+			w.lockHelper.lockMu.Unlock()
+		}
+	}
+}
+
+//bencq-
+
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
 	worker := &worker{
 		config:             config,
@@ -195,6 +455,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		eth:                eth,
 		mux:                mux,
 		chain:              eth.BlockChain(),
+		lockHelper:         newLockHelper(config, eth.BlockChain().CurrentHeader().Number.Uint64()), //bencq+ lockServer provides the POA with lock operations
 		isLocalBlock:       isLocalBlock,
 		localUncles:        make(map[common.Hash]*types.Block),
 		remoteUncles:       make(map[common.Hash]*types.Block),
@@ -211,6 +472,22 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 	}
+	//bencq+
+	//log.Error("bencq:", "worker.fullTaskHook", worker.fullTaskHook)
+	//initialize lockHelper.serverMux
+
+	worker.lockHelper.serverMux = worker.newLockServerMux()
+	//log.Error("bencq:", "worker.lockHelper.endpoints", worker.lockHelper.endpoints, "worker.lockHelper.endpointIndex", worker.lockHelper.endpointIndex)
+
+	addrs := strings.Split(worker.lockHelper.endpoints[worker.lockHelper.endpointIndex], ":")
+	addr := ":" + addrs[len(addrs)-1]
+	//log.Error("bencq:", "addr", addr)
+	go http.ListenAndServe(addr, worker.lockHelper.serverMux) //bencq
+
+	//peilin
+	go worker.insertResumeLockLoop()
+	//bencq-
+
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
@@ -223,6 +500,11 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
 		recommit = minRecommitInterval
 	}
+
+	//bencq+
+	recommit = time.Duration(chainConfig.Clique.Period) * time.Second
+	//log.Error("bencq: newWorker: ", "recommit", recommit)
+	//bencq-
 
 	go worker.mainLoop()
 	go worker.newWorkLoop(recommit)
@@ -377,20 +659,31 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
+			// runtime.GC()
+			//log.Error("bencq: <-w.chainHeadCh:", "head.Block.NumberU64()", head.Block.NumberU64())
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
+			//bencq+
 			commit(false, commitInterruptNewHead)
+			//bencq-
 
 		case <-timer.C:
+			log.Error("bencq: <-timer.C:", "w.lockHelper.lockVal", atomic.LoadInt32(w.lockHelper.lockVal))
 			// If mining is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
+				// bencq+
+				// disable short circuit
 				if atomic.LoadInt32(&w.newTxs) == 0 {
-					timer.Reset(recommit)
-					continue
+					//log.Error("bencq: <-timer.C commit false")
+					commit(false, commitInterruptNone)
+				} else {
+					//log.Error("bencq: <-timer.C commit true")
+					commit(true, commitInterruptResubmit)
 				}
-				commit(true, commitInterruptResubmit)
+				// bencq-
+
 			}
 
 		case interval := <-w.resubmitIntervalCh:
@@ -441,6 +734,9 @@ func (w *worker) mainLoop() {
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
+			//bencq+
+			log.Error("bencq: mainLoop ev := <-w.chainSideCh:", "ev.Block.NumberU64()", ev.Block.NumberU64())
+			//bencq-
 			// Short circuit for duplicate side blocks
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
 				continue
@@ -480,6 +776,9 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
+			//bencq+
+			// //log.Error("bencq: mainloop: for: ev := <-w.txsCh:")
+			//bencq-
 			// Apply transactions to the pending state if we're not mining.
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -487,6 +786,7 @@ func (w *worker) mainLoop() {
 			// be automatically eliminated.
 			if !w.isRunning() && w.current != nil {
 				// If block is already full, abort
+				//log.Error("bencq: mainLoop: ev := <-w.txsCh: !w.isRunning() && w.current != nil: ")
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
 				}
@@ -631,11 +931,40 @@ func (w *worker) resultLoop() {
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
+			//bencq+
+			//log.Error("bencq: resultLoop: bf w.mux.Post")
+			//bencq-
+
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
+			//bencq+
+			//log.Error("bencq: resultLoop: af w.mux.Post")
+			//bencq-
+
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
+
+			//bencq+
+			//log.Error("bencq: resultLoop: bf")
+
+			exBlkNumber := block.NumberU64()
+			log.Error("bencq: resultLoop: tlock: out", "exBlkNumber", exBlkNumber)
+			if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
+				log.Error("bencq: resultLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+			} else {
+				w.lockHelper.lockMu.Lock()
+				if *w.lockHelper.lockVal == 0 {
+					log.Error("bencq: resultLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+				} else {
+					atomic.StoreInt32(w.lockHelper.lockVal, 0)
+					log.Error("bencq: resultLoop: tlock: out", "exBlkNumber", exBlkNumber)
+				}
+				w.lockHelper.lockMu.Unlock()
+			}
+
+			//log.Error("bencq: resultLoop: af")
+			//bencq-
 
 		case <-w.exitCh:
 			return
@@ -738,7 +1067,9 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
+		//log.Error("bencq: commitTransaction: bf RevertToSnapshot", "err", err)
 		w.current.state.RevertToSnapshot(snap)
+		//log.Error("bencq: commitTransaction: af RevertToSnapshot", "err", err)
 		return nil, err
 	}
 	w.current.txs = append(w.current.txs, tx)
@@ -811,34 +1142,46 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		case errors.Is(err, core.ErrGasLimitReached):
 			// Pop the current out-of-gas transaction without shifting in the next from the account
 			log.Trace("Gas limit exceeded for current block", "sender", from)
+			//log.Error("bencq: bf core.ErrGasLimitReached, txs.Pop()")
 			txs.Pop()
+			//log.Error("bencq: af core.ErrGasLimitReached, txs.Pop()")
 
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
 			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+			//log.Error("bencq: bf core.ErrNonceTooLow, txs.Shift()")
 			txs.Shift()
+			//log.Error("bencq: af core.ErrNonceTooLow, txs.Shift()")
 
 		case errors.Is(err, core.ErrNonceTooHigh):
 			// Reorg notification data race between the transaction pool and miner, skip account =
 			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+			//log.Error("bencq: bf core.ErrNonceTooHigh, txs.Pop()")
 			txs.Pop()
+			//log.Error("bencq: bf core.ErrNonceTooHigh, txs.Pop()")
 
 		case errors.Is(err, nil):
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
+			// //log.Error("bencq: bf err nil, txs.Shift()")
 			txs.Shift()
+			// //log.Error("bencq: bf err nil, txs.Shift()")
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
 			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
+			//log.Error("bencq: bf core.ErrTxTypeNotSupported, txs.Pop()")
 			txs.Pop()
+			//log.Error("bencq: bf core.ErrTxTypeNotSupported, txs.Pop()")
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			//log.Error("bencq: bf err default, txs.Shift()")
 			txs.Shift()
+			//log.Error("bencq: bf err default, txs.Shift()")
 		}
 	}
 
@@ -884,6 +1227,81 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		Extra:      w.extra,
 		Time:       uint64(timestamp),
 	}
+
+	//log.Error("bencq: CommitNewWork", "toBlkNumber", header.Number.Uint64())
+
+	//bencq+
+	// ensure the consensus method is Clique rather than Ethash
+	//log.Error("bencq:", "w.chainConfig.Clique", w.chainConfig.Clique)
+	if w.isRunning() && w.chainConfig.Clique != nil {
+		falseResume := func(exBlkNumber uint64) {
+			atomic.StoreInt32(w.lockHelper.lockVal, 0)
+			log.Error("bencq: falseResume commitNewWork: tlock: out", "exBlkNumber", exBlkNumber)
+		}
+		exBlkNumber := parent.NumberU64()
+		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
+			log.Error("bencq: commitNewWork: bf lockMu: ", "exBlkNumber", exBlkNumber)
+			return
+		} else {
+			w.lockHelper.lockMu.Lock()
+			if *w.lockHelper.lockVal == 1 {
+				log.Error("bencq: commitNewWork: af lockMu: ", "exBlkNumber", exBlkNumber)
+			} else {
+				atomic.StoreInt32(w.lockHelper.lockVal, 1)
+
+				toBlkNumber := header.Number.Uint64()
+				log.Error("bencq: commitNewWork lock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+				log.Error("bencq: commitNewWork: ", "tlock: in", LocalLock, "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+				if toBlkNumber != exBlkNumber+1 {
+					falseResume(exBlkNumber)
+					return
+				}
+
+				cE := w.chain.Engine()
+
+				leader, signers, inturn, err := cE.(*clique.Clique).RetrieveInfo(w.chain, header, nil)
+				//log.Error("bencq: RetrieveInfo result", "leader", leader, "signers", signers, "inturn", inturn, "err", err)
+				//log.Error("bencq: after RetrieveInfo, check", "w.lockHelper.etherbases[w.lockHelper.endpointIndex]", w.lockHelper.etherbases[w.lockHelper.endpointIndex])
+				if err != nil {
+					//log.Error("bencq: Failed to execute func IsInturn", "err", err)
+					falseResume(exBlkNumber)
+					return
+				}
+				if inturn {
+
+					requestLocksSuc, approveSignerInds := w.requestLocks(signers, toBlkNumber)
+					//log.Error("bencq:", "requestLocksSuc", requestLocksSuc)
+					if !requestLocksSuc {
+						w.returnLocks(signers, approveSignerInds, toBlkNumber)
+						falseResume(exBlkNumber)
+						return
+					}
+
+				} else {
+
+					grabLeaderSuc := w.grabLockFromLeaderNode(leader, toBlkNumber)
+					//log.Error("bencq: ", "grabLeaderSuc", grabLeaderSuc)
+					if !grabLeaderSuc {
+						falseResume(exBlkNumber)
+						return
+					}
+
+					grabFollowersSuc, approveSignerInds := w.reqLockFromFollowerNodes(leader, signers, toBlkNumber)
+					//log.Error("bencq: ", "grabFollowersSuc", grabFollowersSuc)
+					if !grabFollowersSuc {
+						w.returnLocks(signers, approveSignerInds, toBlkNumber)
+						falseResume(exBlkNumber)
+						return
+					}
+
+				}
+			}
+			w.lockHelper.lockMu.Unlock()
+		}
+	}
+	//log.Error("bencq: end of worker.go bencq+")
+	//bencq-
+
 	// Only set the coinbase if our consensus engine is running (avoid spurious block rewards)
 	if w.isRunning() {
 		if w.coinbase == (common.Address{}) {
@@ -947,9 +1365,13 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
+	//bencq+
+	// disable commitnewWork in advance
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
+		//log.Error("bencq: commitNewWork sealing in advance", "num", header.Number.Uint64())
 		w.commit(uncles, nil, false, tstart)
 	}
+	//bencq-
 
 	// Fill the block with all available pending transactions.
 	pending, err := w.eth.TxPool().Pending()
@@ -957,13 +1379,19 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		log.Error("Failed to fetch pending transactions", "err", err)
 		return
 	}
+
 	// Short circuit if there is no available pending transactions.
 	// But if we disable empty precommit already, ignore it. Since
 	// empty block is necessary to keep the liveness of the network.
+	//bencq+
+	//disable short circuit
 	if len(pending) == 0 && atomic.LoadUint32(&w.noempty) == 0 {
+		//log.Error("bencq: commitNewWork short circuit", "num", header.Number.Uint64())
 		w.updateSnapshot()
 		return
 	}
+	//bencq-
+
 	// Split the pending transactions into locals and remotes
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 	for _, account := range w.eth.TxPool().Locals() {
@@ -972,18 +1400,25 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
+	//bencq+
+	txCnt := len(localTxs) + len(remoteTxs)
+	log.Error("bencq: commitNewWork", "txCnt", txCnt)
+	//bencq-
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			//log.Error("bencq: commitNewWork len(localTxs) > 0 w.commitTransactions")
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			//log.Error("bencq: commitNewWork len(remoteTxs) > 0 w.commitTransactions")
 			return
 		}
 	}
+	//log.Error("bencq: w.commit", "num", header.Number.Uint64())
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
@@ -1036,6 +1471,218 @@ func (w *worker) postSideBlock(event core.ChainSideEvent) {
 	case <-w.exitCh:
 	}
 }
+
+// bencq+
+func (w *worker) requestLockSync(endpoint string, toBlkNumber uint64) bool {
+
+	// TODO: there may be some mistakes here
+
+	url := "http://" + endpoint + "/" + GetLockFromFollower
+	//log.Error("bencq: requestLockSync: ", "url", url, "toBlkNumber", toBlkNumber)
+
+	reqBody := ReqBody{
+		ToBlkNumber: toBlkNumber,
+	}
+
+	jsonStr, _ := json.Marshal(reqBody)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
+
+	ret := true
+	if err != nil || resp.StatusCode != http.StatusOK {
+		ret = false
+	}
+	//log.Error("bencq: requestLockSync: ", "ret", ret)
+	return ret
+}
+
+func (w *worker) returnLocks(signers []common.Address, approveSignerInds []int, toBlkNumber uint64) bool {
+	log.Error("bencq: returnLocks: ", "approveSignerInds", approveSignerInds, "toBlkNumber", toBlkNumber)
+	suc := true
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	wg.Add(len(approveSignerInds))
+	for _, arrInd := range approveSignerInds {
+		signer := signers[arrInd]
+		if signer == w.lockHelper.etherbases[w.lockHelper.endpointIndex] {
+			//do nothing
+			wg.Done()
+		} else {
+			go func(signer common.Address) {
+				mutex.Lock()
+				defer mutex.Unlock()
+				returnSuc := w.returnLock(signer, toBlkNumber)
+				suc = suc && returnSuc
+				wg.Done()
+			}(signer)
+		}
+	}
+	wg.Wait()
+	log.Error("bencq: returnLocks: ", "suc", suc)
+	return suc
+}
+
+func (w *worker) returnLock(signer common.Address, toBlkNumber uint64) bool {
+	if signer == w.lockHelper.etherbases[w.lockHelper.endpointIndex] {
+		log.Error("bencq: "+ReturnLock+": ", "leader == thisEb", true)
+		return true
+	}
+	endpoint := w.getEndPoint(signer)
+	if endpoint == "" {
+		log.Error("bencq: "+ReturnLock+": ", "endpoint", endpoint)
+		return false
+	}
+
+	url := "http://" + endpoint + "/" + ReturnLock
+	log.Error("bencq: "+ReturnLock+": ", "url", url, "toBlkNumber", toBlkNumber)
+
+	reqBody := ReqBody{
+		ToBlkNumber: toBlkNumber,
+	}
+
+	jsonStr, _ := json.Marshal(reqBody)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
+
+	ret := true
+	if err != nil || resp.StatusCode != http.StatusOK {
+		log.Error("bencq: "+ReturnLock+": ", "err", err)
+		if resp != nil {
+			log.Error("bencq: "+ReturnLock+": ", "resp.StatusCode", resp.StatusCode)
+		}
+		ret = false
+	}
+	log.Error("bencq: "+ReturnLock+": ", "ret", ret)
+	return ret
+}
+
+func (w *worker) requestLocks(signers []common.Address, toBlkNumber uint64) (bool, []int) {
+
+	suc, approveSignerInds := w.reqLockFromFollowerNodes(common.Address{}, signers, toBlkNumber)
+	//log.Error("bencq: requestLocks: ", "suc", suc)
+	return suc, approveSignerInds
+}
+
+func (w *worker) getEndPoint(signer common.Address) string {
+	addr, ok := w.lockHelper.eb2endpts[signer]
+	log.Error("bencq: getEndPoint: ", "addr", addr, "ok", ok)
+	return addr
+}
+
+func (w *worker) grabLockFromLeaderNode(leader common.Address, toBlkNumber uint64) bool {
+	if leader == w.lockHelper.etherbases[w.lockHelper.endpointIndex] {
+		//log.Error("bencq: grabLockFromLeaderNode: ", "leader == thisEb", true)
+		return true
+	}
+	endpoint := w.getEndPoint(leader)
+	if endpoint == "" {
+		//log.Error("bencq: grabLockFromLeaderNode: ", "endpoint", endpoint)
+		return false
+	}
+
+	url := "http://" + endpoint + "/" + GrabLockFromLeader
+	//log.Error("bencq: grabLockFromLeaderNode: ", "url", url, "toBlkNumber", toBlkNumber)
+
+	reqBody := ReqBody{
+		ToBlkNumber: toBlkNumber,
+	}
+
+	jsonStr, _ := json.Marshal(reqBody)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
+
+	ret := true
+	if err != nil || resp.StatusCode != http.StatusOK {
+		ret = false
+	}
+	//log.Error("bencq: grabLockFromLeaderNode: ", "ret", ret)
+	return ret
+}
+
+func (w *worker) reqLockFromFollowerNodes(leader common.Address, signers []common.Address, toBlkNumber uint64) (bool, []int) {
+
+	//log.Error("bencq: reqLockFromFollowerNodes")
+
+	signersLen := len(signers)
+
+	minF := signersLen / 2 // "+2" gets ceiling of (signersLen - 1) / 3
+	minApproveCnt := minF + 1
+	maxDisapproveCnt := signersLen - minApproveCnt
+
+	//log.Error("bencq: reqLockFromFollowerNodes", "signersLen", signersLen, "minF", minF, "minApproveCnt", minApproveCnt, "maxDisapproveCnt", maxDisapproveCnt)
+
+	approveSignerInds := make([]int, 0, minApproveCnt)
+	disapproveSignerInds := make([]int, 0, maxDisapproveCnt+1)
+
+	var wg sync.WaitGroup
+	reqSucChan := make(chan bool, 1)
+	closed := false
+	var mutex sync.Mutex
+	var randStartInd = rand.Intn(signersLen)
+	for ind := range signers {
+		wg.Add(1)
+		arrInd := (ind + randStartInd) % signersLen
+		signer := signers[arrInd]
+		if signer == leader || signer == w.lockHelper.etherbases[w.lockHelper.endpointIndex] {
+			mutex.Lock()
+			approveSignerInds = append(approveSignerInds, arrInd)
+			if len(approveSignerInds) >= minApproveCnt {
+				if !closed {
+					reqSucChan <- true
+					closed = true
+				}
+				mutex.Unlock()
+				wg.Done()
+				break
+			} else {
+				mutex.Unlock()
+				wg.Done()
+				continue
+			}
+		} else {
+			go func(signer common.Address) {
+				endpt := w.getEndPoint(signer)
+				reqSuc := w.requestLockSync(endpt, toBlkNumber)
+				mutex.Lock()
+				defer mutex.Unlock()
+				defer wg.Done()
+				if reqSuc {
+					approveSignerInds = append(approveSignerInds, arrInd)
+					if len(approveSignerInds) >= minApproveCnt {
+						if !closed {
+							reqSucChan <- true
+							closed = true
+						}
+					}
+				} else {
+					disapproveSignerInds = append(disapproveSignerInds, arrInd)
+					if len(disapproveSignerInds) > maxDisapproveCnt {
+						if !closed {
+							reqSucChan <- false
+							closed = true
+						}
+					}
+				}
+			}(signer)
+		}
+	}
+	suc := <-reqSucChan
+	wg.Wait()
+	//log.Error("bencq: reqLockFromFollowerNodes: ", "approveCnt", len(approveSignerInds), "disapproveCnt", len(disapproveSignerInds), "suc", suc)
+	return suc, approveSignerInds
+}
+
+const (
+	GetLockFromFollower  string = "getLockFromFollower"
+	GrabLockFromLeader   string = "grabLockFromLeader"
+	GrabLockFromFollower string = "grabLockFromFollower"
+	ReturnLock           string = "returnLock"
+	NoneLock             string = "none"
+	LocalLock            string = "local"
+	RemoteLock           string = "remote"
+)
+
+// bencq-
 
 // totalFees computes total consumed fees in ETH. Block transactions and receipts have to have the same order.
 func totalFees(block *types.Block, receipts []*types.Receipt) *big.Float {

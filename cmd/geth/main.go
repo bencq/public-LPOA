@@ -197,6 +197,17 @@ var (
 		utils.MetricsInfluxDBPasswordFlag,
 		utils.MetricsInfluxDBTagsFlag,
 	}
+
+	//bencq+
+
+	mLPOAFlags = []cli.Flag{
+		utils.EndPointsFlag,
+		utils.EndPointIndexFlag,
+		utils.EtherBasesFlag,
+		utils.OvertimeFlag,
+	}
+
+	//bencq-
 )
 
 func init() {
@@ -243,6 +254,10 @@ func init() {
 	app.Flags = append(app.Flags, consoleFlags...)
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Flags = append(app.Flags, metricsFlags...)
+
+	//bencq+
+	app.Flags = append(app.Flags, mLPOAFlags...)
+	//bencq-
 
 	app.Before = func(ctx *cli.Context) error {
 		return debug.Setup(ctx)

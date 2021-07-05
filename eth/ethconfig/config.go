@@ -113,6 +113,17 @@ func init() {
 
 // Config contains configuration options for of the ETH and LES protocols.
 type Config struct {
+
+	//bencq+
+
+	// LPOA Config
+	EndPointsFlag  string
+	EndPointIndex  int
+	EtherBasesFlag string
+	OvertimeFlag   int
+
+	//bencq-
+
 	// The genesis block, which is inserted if the database is empty.
 	// If nil, the Ethereum main net block is used.
 	Genesis *core.Genesis `toml:",omitempty"`
