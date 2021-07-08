@@ -593,12 +593,12 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	}
 
 	//bencq+
-	recommit = time.Duration(chainConfig.Clique.Period) * time.Second
+	// recommit = time.Duration(chainConfig.Clique.Period) * time.Second
 	//log.Error("bencq: newWorker: ", "recommit", recommit)
 	//bencq-
 
 	go worker.mainLoop()
-	go worker.newWorkLoop(recommit)
+	go worker.newWorkLoop(recommit, time.Duration(chainConfig.Clique.Period)*time.Second)
 	go worker.resultLoop()
 	go worker.taskLoop()
 
@@ -717,7 +717,7 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 }
 
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
-func (w *worker) newWorkLoop(recommit time.Duration) {
+func (w *worker) newWorkLoop(recommit time.Duration, liveInterval time.Duration) {
 	var (
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
@@ -728,12 +728,18 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	defer timer.Stop()
 	<-timer.C // discard the initial tick
 
+	liveTimer := time.NewTimer(0)
+	defer liveTimer.Stop()
+	<-liveTimer.C
+
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		log.Error("bencq: commit:")
 		res := w.lockReqest()
 		if !res {
-			timer.Reset(recommit)
+			delayT := liveInterval * time.Duration(rand.Intn(5)+2) / 10
+			liveTimer.Reset(delayT)
+			timer.Reset(delayT + recommit)
 			return
 		}
 
@@ -775,6 +781,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			//bencq+
 			commit(false, commitInterruptNewHead)
 			//bencq-
+
+		case <-liveTimer.C:
+			clearPending(w.chain.CurrentBlock().NumberU64())
+			timestamp = time.Now().Unix()
+			commit(false, commitInterruptNewHead)
 
 		case <-timer.C:
 			log.Error("bencq: <-timer.C:", "w.lockHelper.lockVal", atomic.LoadInt32(w.lockHelper.lockVal))
