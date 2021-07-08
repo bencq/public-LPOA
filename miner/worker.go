@@ -225,8 +225,8 @@ type LockHelper struct {
 
 func newLockHelper(config *Config, exBlkNumber uint64) *LockHelper {
 	ret := &LockHelper{
-		serverMux: nil,
-
+		serverMux:     nil,
+		lockVal:       new(int32),
 		endpoints:     config.Endpts,
 		endpointIndex: config.EndptsIndex,
 		etherbases:    config.Etherbases,
@@ -236,6 +236,9 @@ func newLockHelper(config *Config, exBlkNumber uint64) *LockHelper {
 	log.Error("bencq: newLockHelper:", "lock: in", exBlkNumber)
 	for ind := range ret.endpoints {
 		ret.eb2endpts[ret.etherbases[ind]] = ret.endpoints[ind]
+	}
+	for k, v := range ret.eb2endpts {
+		log.Error("bencq: newLockHelper:", "k", k, "v", v)
 	}
 	return ret
 }
@@ -260,7 +263,7 @@ func (w *worker) HandleGetLockFromFollower(resp http.ResponseWriter, req *http.R
 		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
-		if *w.lockHelper.lockVal == 1 {
+		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 			resp.WriteHeader(http.StatusForbidden)
 			log.Error("bencq: HandleGetLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
 		} else {
@@ -296,7 +299,7 @@ func (w *worker) HandleGrabLockFromLeader(resp http.ResponseWriter, req *http.Re
 		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
-		if *w.lockHelper.lockVal == 1 {
+		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 			resp.WriteHeader(http.StatusForbidden)
 			log.Error("bencq: HandleGrabLockFromLeader: af lockMu", "resp.WriteHeader", http.StatusForbidden)
 		} else {
@@ -333,7 +336,7 @@ func (w *worker) HandleGrabLockFromFollower(resp http.ResponseWriter, req *http.
 		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
-		if *w.lockHelper.lockVal == 1 {
+		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 			resp.WriteHeader(http.StatusForbidden)
 			log.Error("bencq: HandleGrabLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
 		} else {
@@ -370,7 +373,7 @@ func (w *worker) HandleReturnLock(resp http.ResponseWriter, req *http.Request) {
 		log.Error("bencq: HandleReturnLock: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
-		if *w.lockHelper.lockVal == 0 {
+		if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
 			resp.WriteHeader(http.StatusForbidden)
 			log.Error("bencq: HandleReturnLock: af lockMu: ", "resp.WriteHeader", http.StatusForbidden)
 		} else {
@@ -434,7 +437,7 @@ func (w *worker) insertResumeLockLoop() {
 			log.Error("bencq: insertResumeLockLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 		} else {
 			w.lockHelper.lockMu.Lock()
-			if *w.lockHelper.lockVal == 0 {
+			if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
 				log.Error("bencq: insertResumeLockLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 			} else {
 				atomic.StoreInt32(w.lockHelper.lockVal, 0)
@@ -443,6 +446,94 @@ func (w *worker) insertResumeLockLoop() {
 			w.lockHelper.lockMu.Unlock()
 		}
 	}
+}
+
+func (w *worker) lockReqest() bool {
+
+	//log.Error("bencq: CommitNewWork", "toBlkNumber", header.Number.Uint64())
+
+	//bencq+
+	// ensure the consensus method is Clique rather than Ethash
+	//log.Error("bencq:", "w.chainConfig.Clique", w.chainConfig.Clique)
+	if w.isRunning() && w.chainConfig.Clique != nil {
+		parent := w.chain.CurrentBlock()
+		num := parent.Number()
+		header := &types.Header{
+			ParentHash: parent.Hash(),
+			Number:     num.Add(num, common.Big1),
+		}
+
+		falseResume := func(exBlkNumber uint64) {
+			atomic.StoreInt32(w.lockHelper.lockVal, 0)
+			log.Error("bencq: falseResume commitNewWork: tlock: out", "exBlkNumber", exBlkNumber)
+		}
+		exBlkNumber := parent.NumberU64()
+		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
+			log.Error("bencq: commitNewWork: bf lockMu: ", "exBlkNumber", exBlkNumber)
+			return false
+		} else {
+			w.lockHelper.lockMu.Lock()
+			defer w.lockHelper.lockMu.Unlock()
+			if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
+				log.Error("bencq: commitNewWork: af lockMu: ", "exBlkNumber", exBlkNumber)
+				return false
+			} else {
+				atomic.StoreInt32(w.lockHelper.lockVal, 1)
+
+				toBlkNumber := header.Number.Uint64()
+				log.Error("bencq: commitNewWork lock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+				log.Error("bencq: commitNewWork: ", "tlock: in", LocalLock, "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+				if toBlkNumber != exBlkNumber+1 {
+					falseResume(exBlkNumber)
+					return false
+				}
+
+				cE := w.chain.Engine()
+
+				leader, signers, inturn, err := cE.(*clique.Clique).RetrieveInfo(w.chain, header, nil)
+				//log.Error("bencq: RetrieveInfo result", "leader", leader, "signers", signers, "inturn", inturn, "err", err)
+				//log.Error("bencq: after RetrieveInfo, check", "w.lockHelper.etherbases[w.lockHelper.endpointIndex]", w.lockHelper.etherbases[w.lockHelper.endpointIndex])
+				if err != nil {
+					log.Error("bencq: Failed to execute func IsInturn", "err", err)
+					falseResume(exBlkNumber)
+					return false
+				}
+				if inturn {
+
+					requestLocksSuc, approveSignerInds := w.requestLocks(signers, toBlkNumber)
+					log.Error("bencq:", "requestLocksSuc", requestLocksSuc)
+					if !requestLocksSuc {
+						w.returnLocks(signers, approveSignerInds, toBlkNumber)
+						falseResume(exBlkNumber)
+						return false
+					}
+
+				} else {
+
+					grabLeaderSuc := w.grabLockFromLeaderNode(leader, toBlkNumber)
+					log.Error("bencq: ", "grabLeaderSuc", grabLeaderSuc)
+					if !grabLeaderSuc {
+						falseResume(exBlkNumber)
+						return false
+					}
+
+					grabFollowersSuc, approveSignerInds := w.reqLockFromFollowerNodes(leader, signers, toBlkNumber)
+					log.Error("bencq: ", "grabFollowersSuc", grabFollowersSuc)
+					if !grabFollowersSuc {
+						w.returnLocks(signers, approveSignerInds, toBlkNumber)
+						falseResume(exBlkNumber)
+						return false
+					}
+
+				}
+			}
+
+		}
+		return true
+	}
+	return false
+	//bencq-
+
 }
 
 //bencq-
@@ -510,6 +601,17 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	go worker.newWorkLoop(recommit)
 	go worker.resultLoop()
 	go worker.taskLoop()
+
+	//bencq: test
+	// go func() {
+	// 	for {
+	// 		log.Error("bencq: test: ", "*worker.lockHelper.lockVal", *worker.lockHelper.lockVal)
+	// 		worker.lockHelper.lockMu.Lock()
+	// 		log.Error("bencq: test: inlock")
+	// 		worker.lockHelper.lockMu.Unlock()
+	// 		time.Sleep(time.Second)
+	// 	}
+	// }()
 
 	// Submit first work to initialize pending state.
 	if init {
@@ -628,6 +730,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
+		log.Error("bencq: commit:")
+		res := w.lockReqest()
+		if !res {
+			timer.Reset(recommit)
+			return
+		}
+
 		if interrupt != nil {
 			atomic.StoreInt32(interrupt, s)
 		}
@@ -676,8 +785,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				// bencq+
 				// disable short circuit
 				if atomic.LoadInt32(&w.newTxs) == 0 {
-					//log.Error("bencq: <-timer.C commit false")
-					commit(false, commitInterruptNone)
+					timer.Reset(recommit)
+					continue
 				} else {
 					//log.Error("bencq: <-timer.C commit true")
 					commit(true, commitInterruptResubmit)
@@ -954,7 +1063,7 @@ func (w *worker) resultLoop() {
 				log.Error("bencq: resultLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 			} else {
 				w.lockHelper.lockMu.Lock()
-				if *w.lockHelper.lockVal == 0 {
+				if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
 					log.Error("bencq: resultLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 				} else {
 					atomic.StoreInt32(w.lockHelper.lockVal, 0)
@@ -1228,80 +1337,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		Time:       uint64(timestamp),
 	}
 
-	//log.Error("bencq: CommitNewWork", "toBlkNumber", header.Number.Uint64())
-
-	//bencq+
-	// ensure the consensus method is Clique rather than Ethash
-	//log.Error("bencq:", "w.chainConfig.Clique", w.chainConfig.Clique)
-	if w.isRunning() && w.chainConfig.Clique != nil {
-		falseResume := func(exBlkNumber uint64) {
-			atomic.StoreInt32(w.lockHelper.lockVal, 0)
-			log.Error("bencq: falseResume commitNewWork: tlock: out", "exBlkNumber", exBlkNumber)
-		}
-		exBlkNumber := parent.NumberU64()
-		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
-			log.Error("bencq: commitNewWork: bf lockMu: ", "exBlkNumber", exBlkNumber)
-			return
-		} else {
-			w.lockHelper.lockMu.Lock()
-			if *w.lockHelper.lockVal == 1 {
-				log.Error("bencq: commitNewWork: af lockMu: ", "exBlkNumber", exBlkNumber)
-			} else {
-				atomic.StoreInt32(w.lockHelper.lockVal, 1)
-
-				toBlkNumber := header.Number.Uint64()
-				log.Error("bencq: commitNewWork lock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
-				log.Error("bencq: commitNewWork: ", "tlock: in", LocalLock, "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
-				if toBlkNumber != exBlkNumber+1 {
-					falseResume(exBlkNumber)
-					return
-				}
-
-				cE := w.chain.Engine()
-
-				leader, signers, inturn, err := cE.(*clique.Clique).RetrieveInfo(w.chain, header, nil)
-				//log.Error("bencq: RetrieveInfo result", "leader", leader, "signers", signers, "inturn", inturn, "err", err)
-				//log.Error("bencq: after RetrieveInfo, check", "w.lockHelper.etherbases[w.lockHelper.endpointIndex]", w.lockHelper.etherbases[w.lockHelper.endpointIndex])
-				if err != nil {
-					//log.Error("bencq: Failed to execute func IsInturn", "err", err)
-					falseResume(exBlkNumber)
-					return
-				}
-				if inturn {
-
-					requestLocksSuc, approveSignerInds := w.requestLocks(signers, toBlkNumber)
-					//log.Error("bencq:", "requestLocksSuc", requestLocksSuc)
-					if !requestLocksSuc {
-						w.returnLocks(signers, approveSignerInds, toBlkNumber)
-						falseResume(exBlkNumber)
-						return
-					}
-
-				} else {
-
-					grabLeaderSuc := w.grabLockFromLeaderNode(leader, toBlkNumber)
-					//log.Error("bencq: ", "grabLeaderSuc", grabLeaderSuc)
-					if !grabLeaderSuc {
-						falseResume(exBlkNumber)
-						return
-					}
-
-					grabFollowersSuc, approveSignerInds := w.reqLockFromFollowerNodes(leader, signers, toBlkNumber)
-					//log.Error("bencq: ", "grabFollowersSuc", grabFollowersSuc)
-					if !grabFollowersSuc {
-						w.returnLocks(signers, approveSignerInds, toBlkNumber)
-						falseResume(exBlkNumber)
-						return
-					}
-
-				}
-			}
-			w.lockHelper.lockMu.Unlock()
-		}
-	}
-	//log.Error("bencq: end of worker.go bencq+")
-	//bencq-
-
 	// Only set the coinbase if our consensus engine is running (avoid spurious block rewards)
 	if w.isRunning() {
 		if w.coinbase == (common.Address{}) {
@@ -1565,7 +1600,7 @@ func (w *worker) requestLocks(signers []common.Address, toBlkNumber uint64) (boo
 
 func (w *worker) getEndPoint(signer common.Address) string {
 	addr, ok := w.lockHelper.eb2endpts[signer]
-	log.Error("bencq: getEndPoint: ", "addr", addr, "ok", ok)
+	log.Error("bencq: getEndPoint: ", "signer", signer, "addr", addr, "ok", ok)
 	return addr
 }
 
