@@ -739,7 +739,7 @@ func (w *worker) newWorkLoop(recommit time.Duration, liveInterval time.Duration)
 		if !res {
 			delayT := liveInterval * time.Duration(rand.Intn(5)+2) / 10
 			liveTimer.Reset(delayT)
-			timer.Reset(delayT + recommit)
+			// timer.Reset(delayT + recommit)
 			return
 		}
 
@@ -785,7 +785,13 @@ func (w *worker) newWorkLoop(recommit time.Duration, liveInterval time.Duration)
 		case <-liveTimer.C:
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
-			commit(false, commitInterruptNewHead)
+
+			if atomic.LoadInt32(&w.newTxs) == 0 {
+				commit(false, commitInterruptNewHead)
+			} else {
+				//log.Error("bencq: <-timer.C commit true")
+				commit(true, commitInterruptNewHead)
+			}
 
 		case <-timer.C:
 			log.Error("bencq: <-timer.C:", "w.lockHelper.lockVal", atomic.LoadInt32(w.lockHelper.lockVal))
