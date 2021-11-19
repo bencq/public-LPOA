@@ -233,7 +233,7 @@ func newLockHelper(config *Config, exBlkNumber uint64) *LockHelper {
 		eb2endpts:     make(map[common.Address]string),
 		overtime:      config.Overtime,
 	}
-	log.Error("bencq: newLockHelper:", "lock: in", exBlkNumber)
+	// log.Error("bencq: newLockHelper:", "lock: in", exBlkNumber)
 	for ind := range ret.endpoints {
 		ret.eb2endpts[ret.etherbases[ind]] = ret.endpoints[ind]
 	}
@@ -260,20 +260,20 @@ func (w *worker) HandleGetLockFromFollower(resp http.ResponseWriter, req *http.R
 
 	if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 		resp.WriteHeader(http.StatusForbidden)
-		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+		// log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
 		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 			resp.WriteHeader(http.StatusForbidden)
-			log.Error("bencq: HandleGetLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
+			// log.Error("bencq: HandleGetLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
 		} else {
 			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
 			if toBlkNumber != exBlkNumber+1 {
 				resp.WriteHeader(http.StatusForbidden)
-				log.Error("bencq: HandleGetLockFromFollower: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
+				// log.Error("bencq: HandleGetLockFromFollower: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
 			} else {
 				atomic.StoreInt32(w.lockHelper.lockVal, 1)
-				log.Error("bencq: HandleGetLockFromFollower: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
+				// log.Error("bencq: HandleGetLockFromFollower: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
 				resp.WriteHeader(http.StatusOK)
 			}
 		}
@@ -296,20 +296,20 @@ func (w *worker) HandleGrabLockFromLeader(resp http.ResponseWriter, req *http.Re
 
 	if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 		resp.WriteHeader(http.StatusForbidden)
-		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+		// log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
 		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 			resp.WriteHeader(http.StatusForbidden)
-			log.Error("bencq: HandleGrabLockFromLeader: af lockMu", "resp.WriteHeader", http.StatusForbidden)
+			// log.Error("bencq: HandleGrabLockFromLeader: af lockMu", "resp.WriteHeader", http.StatusForbidden)
 		} else {
 			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
 			if toBlkNumber != exBlkNumber+1 {
 				resp.WriteHeader(http.StatusForbidden)
-				log.Error("bencq: HandleGrabLockFromLeader: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
+				// log.Error("bencq: HandleGrabLockFromLeader: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
 			} else {
 				atomic.StoreInt32(w.lockHelper.lockVal, 1)
-				log.Error("bencq: HandleGrabLockFromLeader: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
+				// log.Error("bencq: HandleGrabLockFromLeader: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
 				resp.WriteHeader(http.StatusOK)
 			}
 		}
@@ -333,20 +333,20 @@ func (w *worker) HandleGrabLockFromFollower(resp http.ResponseWriter, req *http.
 
 	if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 		resp.WriteHeader(http.StatusForbidden)
-		log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+		// log.Error("bencq: HandleGrabLockFromFollower: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
 		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
 			resp.WriteHeader(http.StatusForbidden)
-			log.Error("bencq: HandleGrabLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
+			// log.Error("bencq: HandleGrabLockFromFollower: af lockMu", "resp.WriteHeader", http.StatusForbidden)
 		} else {
 			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
 			if toBlkNumber != exBlkNumber+1 {
 				resp.WriteHeader(http.StatusForbidden)
-				log.Error("bencq: HandleGrabLockFromFollower: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
+				// log.Error("bencq: HandleGrabLockFromFollower: ", "lock: in", exBlkNumber, "resp.WriteHeader", http.StatusForbidden)
 			} else {
 				atomic.StoreInt32(w.lockHelper.lockVal, 1)
-				log.Error("bencq: HandleGrabLockFromFollower: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
+				// log.Error("bencq: HandleGrabLockFromFollower: ", "tlock: in", RemoteLock, "resp.WriteHeader", http.StatusOK)
 				resp.WriteHeader(http.StatusOK)
 			}
 		}
@@ -359,31 +359,31 @@ func (w *worker) HandleReturnLock(resp http.ResponseWriter, req *http.Request) {
 
 	bodyData, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		log.Error("bencq: HandleReturnLock: ioutil.ReadAll", "err", err)
+		// log.Error("bencq: HandleReturnLock: ioutil.ReadAll", "err", err)
 	}
 	var reqBody ReqBody
 	err = json.Unmarshal(bodyData, &reqBody)
 	if err != nil {
-		log.Error("bencq: HandleReturnLock: json.Unmarshal", "err", err)
+		// log.Error("bencq: HandleReturnLock: json.Unmarshal", "err", err)
 	}
 	toBlkNumber := reqBody.ToBlkNumber
 
 	if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
 		resp.WriteHeader(http.StatusForbidden)
-		log.Error("bencq: HandleReturnLock: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
+		// log.Error("bencq: HandleReturnLock: bf lockMu", "resp.WriteHeader", http.StatusForbidden)
 	} else {
 		w.lockHelper.lockMu.Lock()
 		if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
 			resp.WriteHeader(http.StatusForbidden)
-			log.Error("bencq: HandleReturnLock: af lockMu: ", "resp.WriteHeader", http.StatusForbidden)
+			// log.Error("bencq: HandleReturnLock: af lockMu: ", "resp.WriteHeader", http.StatusForbidden)
 		} else {
 			exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
 			if toBlkNumber != exBlkNumber+1 {
-				log.Error("bencq: HandleReturnLock: ", "resp.WriteHeader", http.StatusForbidden)
+				// log.Error("bencq: HandleReturnLock: ", "resp.WriteHeader", http.StatusForbidden)
 				resp.WriteHeader(http.StatusForbidden)
 			} else {
 				atomic.StoreInt32(w.lockHelper.lockVal, 0)
-				log.Error("bencq: HandleReturnLock: tlock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+				// log.Error("bencq: HandleReturnLock: tlock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
 			}
 		}
 		w.lockHelper.lockMu.Unlock()
@@ -434,11 +434,11 @@ func (w *worker) insertResumeLockLoop() {
 		exBlkNumber := w.chain.CurrentHeader().Number.Uint64()
 
 		if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
-			log.Error("bencq: insertResumeLockLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+			// log.Error("bencq: insertResumeLockLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 		} else {
 			w.lockHelper.lockMu.Lock()
 			if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
-				log.Error("bencq: insertResumeLockLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+				// log.Error("bencq: insertResumeLockLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 			} else {
 				atomic.StoreInt32(w.lockHelper.lockVal, 0)
 				log.Error("bencq: insertResumeLockLoop: tlock: out", "exBlkNumber", exBlkNumber)
@@ -465,24 +465,24 @@ func (w *worker) lockReqest() bool {
 
 		falseResume := func(exBlkNumber uint64) {
 			atomic.StoreInt32(w.lockHelper.lockVal, 0)
-			log.Error("bencq: falseResume commitNewWork: tlock: out", "exBlkNumber", exBlkNumber)
+			// log.Error("bencq: falseResume commitNewWork: tlock: out", "exBlkNumber", exBlkNumber)
 		}
 		exBlkNumber := parent.NumberU64()
 		if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
-			log.Error("bencq: commitNewWork: bf lockMu: ", "exBlkNumber", exBlkNumber)
+			// log.Error("bencq: commitNewWork: bf lockMu: ", "exBlkNumber", exBlkNumber)
 			return false
 		} else {
 			w.lockHelper.lockMu.Lock()
 			defer w.lockHelper.lockMu.Unlock()
 			if atomic.LoadInt32(w.lockHelper.lockVal) == 1 {
-				log.Error("bencq: commitNewWork: af lockMu: ", "exBlkNumber", exBlkNumber)
+				// log.Error("bencq: commitNewWork: af lockMu: ", "exBlkNumber", exBlkNumber)
 				return false
 			} else {
 				atomic.StoreInt32(w.lockHelper.lockVal, 1)
 
 				toBlkNumber := header.Number.Uint64()
-				log.Error("bencq: commitNewWork lock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
-				log.Error("bencq: commitNewWork: ", "tlock: in", LocalLock, "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+				// log.Error("bencq: commitNewWork lock: out", "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
+				// log.Error("bencq: commitNewWork: ", "tlock: in", LocalLock, "toBlkNumber", toBlkNumber, "exBlkNumber", exBlkNumber)
 				if toBlkNumber != exBlkNumber+1 {
 					falseResume(exBlkNumber)
 					return false
@@ -494,14 +494,14 @@ func (w *worker) lockReqest() bool {
 				//log.Error("bencq: RetrieveInfo result", "leader", leader, "signers", signers, "inturn", inturn, "err", err)
 				//log.Error("bencq: after RetrieveInfo, check", "w.lockHelper.etherbases[w.lockHelper.endpointIndex]", w.lockHelper.etherbases[w.lockHelper.endpointIndex])
 				if err != nil {
-					log.Error("bencq: Failed to execute func IsInturn", "err", err)
+					// log.Error("bencq: Failed to execute func IsInturn", "err", err)
 					falseResume(exBlkNumber)
 					return false
 				}
 				if inturn {
 
 					requestLocksSuc, approveSignerInds := w.requestLocks(signers, toBlkNumber)
-					log.Error("bencq:", "requestLocksSuc", requestLocksSuc)
+					// log.Error("bencq:", "requestLocksSuc", requestLocksSuc)
 					if !requestLocksSuc {
 						w.returnLocks(signers, approveSignerInds, toBlkNumber)
 						falseResume(exBlkNumber)
@@ -511,14 +511,14 @@ func (w *worker) lockReqest() bool {
 				} else {
 
 					grabLeaderSuc := w.grabLockFromLeaderNode(leader, toBlkNumber)
-					log.Error("bencq: ", "grabLeaderSuc", grabLeaderSuc)
+					// log.Error("bencq: ", "grabLeaderSuc", grabLeaderSuc)
 					if !grabLeaderSuc {
 						falseResume(exBlkNumber)
 						return false
 					}
 
 					grabFollowersSuc, approveSignerInds := w.reqLockFromFollowerNodes(leader, signers, toBlkNumber)
-					log.Error("bencq: ", "grabFollowersSuc", grabFollowersSuc)
+					// log.Error("bencq: ", "grabFollowersSuc", grabFollowersSuc)
 					if !grabFollowersSuc {
 						w.returnLocks(signers, approveSignerInds, toBlkNumber)
 						falseResume(exBlkNumber)
@@ -734,7 +734,7 @@ func (w *worker) newWorkLoop(recommit time.Duration, liveInterval time.Duration)
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
-		log.Error("bencq: commit:")
+		// log.Error("bencq: commit:")
 		res := w.lockReqest()
 		if !res {
 			delayT := liveInterval * time.Duration(rand.Intn(5)+2) / 10
@@ -1074,17 +1074,17 @@ func (w *worker) resultLoop() {
 			//bencq+
 			//log.Error("bencq: resultLoop: bf")
 
-			exBlkNumber := block.NumberU64()
-			log.Error("bencq: resultLoop: tlock: out", "exBlkNumber", exBlkNumber)
+			// exBlkNumber := block.NumberU64()
+			// log.Error("bencq: resultLoop: tlock: out", "exBlkNumber", exBlkNumber)
 			if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
-				log.Error("bencq: resultLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+				// log.Error("bencq: resultLoop: bf lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 			} else {
 				w.lockHelper.lockMu.Lock()
 				if atomic.LoadInt32(w.lockHelper.lockVal) == 0 {
-					log.Error("bencq: resultLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
+					// log.Error("bencq: resultLoop: af lockMu: , lock: out&in", "exBlkNumber", exBlkNumber)
 				} else {
 					atomic.StoreInt32(w.lockHelper.lockVal, 0)
-					log.Error("bencq: resultLoop: tlock: out", "exBlkNumber", exBlkNumber)
+					// log.Error("bencq: resultLoop: tlock: out", "exBlkNumber", exBlkNumber)
 				}
 				w.lockHelper.lockMu.Unlock()
 			}
@@ -1549,7 +1549,7 @@ func (w *worker) requestLockSync(endpoint string, toBlkNumber uint64) bool {
 }
 
 func (w *worker) returnLocks(signers []common.Address, approveSignerInds []int, toBlkNumber uint64) bool {
-	log.Error("bencq: returnLocks: ", "approveSignerInds", approveSignerInds, "toBlkNumber", toBlkNumber)
+	// log.Error("bencq: returnLocks: ", "approveSignerInds", approveSignerInds, "toBlkNumber", toBlkNumber)
 	suc := true
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
@@ -1570,23 +1570,23 @@ func (w *worker) returnLocks(signers []common.Address, approveSignerInds []int, 
 		}
 	}
 	wg.Wait()
-	log.Error("bencq: returnLocks: ", "suc", suc)
+	// log.Error("bencq: returnLocks: ", "suc", suc)
 	return suc
 }
 
 func (w *worker) returnLock(signer common.Address, toBlkNumber uint64) bool {
 	if signer == w.lockHelper.etherbases[w.lockHelper.endpointIndex] {
-		log.Error("bencq: "+ReturnLock+": ", "leader == thisEb", true)
+		// log.Error("bencq: "+ReturnLock+": ", "leader == thisEb", true)
 		return true
 	}
 	endpoint := w.getEndPoint(signer)
 	if endpoint == "" {
-		log.Error("bencq: "+ReturnLock+": ", "endpoint", endpoint)
+		// log.Error("bencq: "+ReturnLock+": ", "endpoint", endpoint)
 		return false
 	}
 
 	url := "http://" + endpoint + "/" + ReturnLock
-	log.Error("bencq: "+ReturnLock+": ", "url", url, "toBlkNumber", toBlkNumber)
+	// log.Error("bencq: "+ReturnLock+": ", "url", url, "toBlkNumber", toBlkNumber)
 
 	reqBody := ReqBody{
 		ToBlkNumber: toBlkNumber,
@@ -1598,9 +1598,9 @@ func (w *worker) returnLock(signer common.Address, toBlkNumber uint64) bool {
 
 	ret := true
 	if err != nil || resp.StatusCode != http.StatusOK {
-		log.Error("bencq: "+ReturnLock+": ", "err", err)
+		// log.Error("bencq: "+ReturnLock+": ", "err", err)
 		if resp != nil {
-			log.Error("bencq: "+ReturnLock+": ", "resp.StatusCode", resp.StatusCode)
+			// log.Error("bencq: "+ReturnLock+": ", "resp.StatusCode", resp.StatusCode)
 		}
 		ret = false
 	}

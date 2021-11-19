@@ -1638,6 +1638,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+	//bencq+
+	ts := time.Now().UnixNano()
+	log.Error("bencq: writeBlockWithState", "ts", ts, "blockNumber", block.NumberU64(), "blockHash", block.Hash().Hex())
+	//bencq-
 	return status, nil
 }
 
@@ -1662,19 +1666,19 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	// peilin
 	defer func() {
-		log.Error("bencq: InsertChain finished", "chain[len(chain)-1].NumberU64()", chain[len(chain)-1].NumberU64())
+		// log.Error("bencq: InsertChain finished", "chain[len(chain)-1].NumberU64()", chain[len(chain)-1].NumberU64())
 		bc.InsertEventChannel <- chain[len(chain)-1].NumberU64()
 	}()
 
-	log.Error("bencq: InsertChain", "len(chain)", len(chain))
+	// log.Error("bencq: InsertChain", "len(chain)", len(chain))
 
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
-		log.Error("bencq: InsertChain", "n", 0)
+		// log.Error("bencq: InsertChain", "n", 0)
 		return 0, nil
 	}
 
-	log.Error("bencq: InsertChain", "chain[len(chain)-1].NumberU64()", chain[len(chain)-1].NumberU64())
+	// log.Error("bencq: InsertChain", "chain[len(chain)-1].NumberU64()", chain[len(chain)-1].NumberU64())
 
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
@@ -1702,7 +1706,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	n, err := bc.insertChain(chain, true)
 	bc.chainmu.Unlock()
 	bc.wg.Done()
-	log.Error("bencq: InsertChain", "n", n)
+	// log.Error("bencq: InsertChain", "n", n)
 	return n, err
 }
 

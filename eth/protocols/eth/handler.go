@@ -24,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -158,12 +157,12 @@ func nodeInfo(chain *core.BlockChain, network uint64) *NodeInfo {
 // the protocol handshake. This method will keep processing messages until the
 // connection is torn down.
 func Handle(backend Backend, peer *Peer) error {
-	stTime := time.Now()
-	//log.Error("bencq: Handle bf")
-	defer func() {
-		elapsed := time.Since(stTime)
-		log.Error("bencq: Handle af", "elapsed", elapsed)
-	}()
+	// stTime := time.Now()
+	// //log.Error("bencq: Handle bf")
+	// defer func() {
+	// 	elapsed := time.Since(stTime)
+	// 	log.Error("bencq: Handle af", "elapsed", elapsed)
+	// }()
 	for {
 		if err := handleMessage(backend, peer); err != nil {
 			peer.Log().Debug("Message handling failed in `eth`", "err", err)
@@ -220,51 +219,51 @@ func handleMessage(backend Backend, peer *Peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
 
 	// bencq+
-	msgCode2Msg := func(msgCode uint64) string {
-		switch msgCode {
-		case 0x00:
-			return "StatusMsg"
-		case 0x01:
-			return "NewBlockHashesMsg"
-		case 0x02:
-			return "TransactionsMsg"
-		case 0x03:
-			return "GetBlockHeadersMsg"
-		case 0x04:
-			return "BlockHeadersMsg"
-		case 0x05:
-			return "GetBlockBodiesMsg"
-		case 0x06:
-			return "BlockBodiesMsg"
-		case 0x07:
-			return "NewBlockMsg"
-		case 0x0d:
-			return "GetNodeDataMsg"
-		case 0x0e:
-			return "NodeDataMsg"
-		case 0x0f:
-			return "GetReceiptsMsg"
-		case 0x10:
-			return "ReceiptsMsg"
-		case 0x08:
-			// Protocol messages overloaded in eth/65
-			return "NewPooledTransactionHashesMsg"
-		case 0x09:
-			return "			GetPooledTransactionsMsg"
-		case 0x0a:
-			return "PooledTransactionsMsg"
-		default:
-			return "err"
-		}
-	}
+	// msgCode2Msg := func(msgCode uint64) string {
+	// 	switch msgCode {
+	// 	case 0x00:
+	// 		return "StatusMsg"
+	// 	case 0x01:
+	// 		return "NewBlockHashesMsg"
+	// 	case 0x02:
+	// 		return "TransactionsMsg"
+	// 	case 0x03:
+	// 		return "GetBlockHeadersMsg"
+	// 	case 0x04:
+	// 		return "BlockHeadersMsg"
+	// 	case 0x05:
+	// 		return "GetBlockBodiesMsg"
+	// 	case 0x06:
+	// 		return "BlockBodiesMsg"
+	// 	case 0x07:
+	// 		return "NewBlockMsg"
+	// 	case 0x0d:
+	// 		return "GetNodeDataMsg"
+	// 	case 0x0e:
+	// 		return "NodeDataMsg"
+	// 	case 0x0f:
+	// 		return "GetReceiptsMsg"
+	// 	case 0x10:
+	// 		return "ReceiptsMsg"
+	// 	case 0x08:
+	// 		// Protocol messages overloaded in eth/65
+	// 		return "NewPooledTransactionHashesMsg"
+	// 	case 0x09:
+	// 		return "			GetPooledTransactionsMsg"
+	// 	case 0x0a:
+	// 		return "PooledTransactionsMsg"
+	// 	default:
+	// 		return "err"
+	// 	}
+	// }
 	// bencq-
-	stTime := time.Now()
+	// stTime := time.Now()
 	msg, err := peer.rw.ReadMsg()
-	edTime := time.Now()
-	elapsed := edTime.Sub(stTime)
-	if elapsed >= time.Second {
-		log.Error("bencq: handleMessage: ", "st", stTime, "ed", edTime, "elapsed", elapsed, "msg.Code", msgCode2Msg(msg.Code))
-	}
+	// edTime := time.Now()
+	// elapsed := edTime.Sub(stTime)
+	// if elapsed >= time.Second {
+	// 	log.Error("bencq: handleMessage: ", "st", stTime, "ed", edTime, "elapsed", elapsed, "msg.Code", msgCode2Msg(msg.Code))
+	// }
 
 	if err != nil {
 		return err
